@@ -1,0 +1,9 @@
+[package]
+name = "instoken"
+description = "Instoken is a pure Rust re-write of tiktoken with performance enhancements and better Rust ergonomics"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]

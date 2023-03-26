@@ -1,0 +1,29 @@
+[package]
+name = "instoken-bench"
+description = "A complex test bench for comparing correctness and performance of instoken against tiktoken"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+# These dependencies are needed because the tiktoken Rust code that we include
+# won't compile without them.
+bstr = "1.0.1"
+fancy-regex = "0.10.0"
+pyo3 = "0.17.3"
+# there's a bug in pyo3 such that if `extension-module` feature is enabled,
+# `cargo test` fails with a link error.  LOLWUT!?  Fortonately for this nasty
+# hack we're doing, we don't actually need to make a Python module from tiktoken we just need
+# the rust code to compile.  So we don't need this module
+#
+# https://pyo3.rs/v0.18.2/faq#i-cant-run-cargo-test-or-i-cant-build-in-a-cargo-workspace-im-having-linker-issues-like-symbol-not-found-or-undefined-reference-to-_pyexc_systemerror
+#pyo3 = {
+#version = "0.17.3",
+#
+#features = ["extension-module"]
+#}
+regex = "1.7.0"
+rustc-hash = "1.1.0"

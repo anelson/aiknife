@@ -1,3 +1,3 @@
 [workspace]
 
-members = ["aiknife", "aik"]
+members = ["aiknife", "aik", "instoken", "instoken-bench"]
