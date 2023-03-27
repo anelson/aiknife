@@ -5,7 +5,9 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bench]]
+name = "regex_vs_ac"
+harness = false
 
 [dependencies]
 instoken = { path = "../instoken" }
@@ -28,3 +30,8 @@ pyo3 = "0.17.3"
 #}
 regex = "1.7.0"
 rustc-hash = "1.1.0"
+
+[dev-dependencies]
+aho-corasick = "0.7.20"
+criterion = "0.4.0"
+fancy-regex = "0.10.0"

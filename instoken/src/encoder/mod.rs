@@ -1,3 +1,4 @@
+use crate::{TokenInt, TokenString};
 use once_cell::sync::OnceCell;
 use std::sync::Arc;
 use strum::{EnumIter, EnumString, EnumVariantNames, IntoEnumIterator};
@@ -54,6 +55,9 @@ pub struct BpeEncoder {
     ///
     /// TODO: would it be faster to simply re-implement the "fancy" regex logic in Rust code?
     pub(crate) regex: fancy_regex::Regex,
+
+    /// All token strings, sorted lexicographically
+    pub(crate) sorted_token_bytes: Vec<TokenString>,
 }
 
 impl BpeEncoder {
@@ -75,122 +79,78 @@ impl BpeEncoder {
                 static INSTANCE: OnceCell<Arc<BpeEncoder>> = OnceCell::new();
                 INSTANCE.get_or_init(|| {
                     let data = data::get_token_data(typ);
-                    let encoder = hash::TokenEncoder::new(data);
-                    let decoder = encoder.invert();
-
                     let special_tokens = vec![(ENDOFTEXT, 100257usize), (FIM_PREFIX, 100258), (FIM_MIDDLE, 100259), (FIM_SUFFIX, 100260), (ENDOFPROMPT, 100276)];
+                    const RE: &str = r##"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"##;
 
-                    let special_token_encoder = hash::TokenEncoder::new(special_tokens);
-                    let special_token_decoder = special_token_encoder.invert();
-
-                    Arc::new(BpeEncoder {
-                        typ,
-                        encode: encoder,
-                        special_tokens_encode: special_token_encoder,
-                        decode: decoder,
-                        special_tokens_decode: special_token_decoder,
-                        regex: fancy_regex::Regex::new(
-                            r##"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+"##)
-                            .expect("BUG: Invalid regex"),
-                    })
+                    Arc::new(BpeEncoder::new_internal(typ, data, special_tokens.into_iter(),RE))
                 }).clone()
             }
             EncoderType::Gpt2 => {
                 static INSTANCE: OnceCell<Arc<BpeEncoder>> = OnceCell::new();
                 INSTANCE.get_or_init(|| {
                     let data = data::get_token_data(typ);
-                    let encoder = hash::TokenEncoder::new(data);
-                    let decoder = encoder.invert();
-
                     let special_tokens = vec![(ENDOFTEXT, 50256usize)];
+                    const RE: &str = r##"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"##;
 
-                    let special_token_encoder = hash::TokenEncoder::new(special_tokens);
-                    let special_token_decoder = special_token_encoder.invert();
-
-                    Arc::new(BpeEncoder {
-                        typ,
-                        encode: encoder,
-                        special_tokens_encode: special_token_encoder,
-                        decode: decoder,
-                        special_tokens_decode: special_token_decoder,
-                        regex: fancy_regex::Regex::new(
-                            r##"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"##)
-                            .expect("BUG: Invalid regex"),
-                    })
+                    Arc::new(BpeEncoder::new_internal(typ, data, special_tokens.into_iter(),RE))
                 }).clone()
             }
             EncoderType::P50kBase => {
                 static INSTANCE: OnceCell<Arc<BpeEncoder>> = OnceCell::new();
                 INSTANCE.get_or_init(|| {
                     let data = data::get_token_data(typ);
-                    let encoder = hash::TokenEncoder::new(data);
-                    let decoder = encoder.invert();
-
                     let special_tokens = vec![(ENDOFTEXT, 50256usize)];
+                    const RE: &str = r##"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"##;
 
-                    let special_token_encoder = hash::TokenEncoder::new(special_tokens);
-                    let special_token_decoder = special_token_encoder.invert();
-
-                    Arc::new(BpeEncoder {
-                        typ,
-                        encode: encoder,
-                        special_tokens_encode: special_token_encoder,
-                        decode: decoder,
-                        special_tokens_decode: special_token_decoder,
-                        regex: fancy_regex::Regex::new(
-                            r##"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"##)
-                            .expect("BUG: Invalid regex"),
-                    })
+                    Arc::new(BpeEncoder::new_internal(typ, data, special_tokens.into_iter(),RE))
                 }).clone()
             }
             EncoderType::P50kEdit => {
                 static INSTANCE: OnceCell<Arc<BpeEncoder>> = OnceCell::new();
                 INSTANCE.get_or_init(|| {
                     let data = data::get_token_data(typ);
-                    let encoder = hash::TokenEncoder::new(data);
-                    let decoder = encoder.invert();
-
                     let special_tokens = vec![(ENDOFTEXT, 50256usize), (FIM_PREFIX, 50281), (FIM_MIDDLE, 50282), (FIM_SUFFIX, 50283)];
+                    const RE: &str = r##"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"##;
 
-                    let special_token_encoder = hash::TokenEncoder::new(special_tokens);
-                    let special_token_decoder = special_token_encoder.invert();
-
-                    Arc::new(BpeEncoder {
-                        typ,
-                        encode: encoder,
-                        special_tokens_encode: special_token_encoder,
-                        decode: decoder,
-                        special_tokens_decode: special_token_decoder,
-                        regex: fancy_regex::Regex::new(
-                            r##"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"##)
-                            .expect("BUG: Invalid regex"),
-                    })
+                    Arc::new(BpeEncoder::new_internal(typ, data, special_tokens.into_iter(),RE))
                 }).clone()
             }
             EncoderType::R50kBase => {
                 static INSTANCE: OnceCell<Arc<BpeEncoder>> = OnceCell::new();
                 INSTANCE.get_or_init(|| {
                     let data = data::get_token_data(typ);
-                    let encoder = hash::TokenEncoder::new(data);
-                    let decoder = encoder.invert();
-
                     let special_tokens = vec![(ENDOFTEXT, 50256usize), (FIM_PREFIX, 50281), (FIM_MIDDLE, 50282), (FIM_SUFFIX, 50283)];
+                    const RE: &str = r##"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"##;
 
-                    let special_token_encoder = hash::TokenEncoder::new(special_tokens);
-                    let special_token_decoder = special_token_encoder.invert();
-
-                    Arc::new(BpeEncoder {
-                        typ,
-                        encode: encoder,
-                        special_tokens_encode: special_token_encoder,
-                        decode: decoder,
-                        special_tokens_decode: special_token_decoder,
-                        regex: fancy_regex::Regex::new(
-                            r##"'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"##)
-                            .expect("BUG: Invalid regex"),
-                    })
+                    Arc::new(BpeEncoder::new_internal(typ, data, special_tokens.into_iter(),RE))
                 }).clone()
             }
+        }
+    }
+
+    fn new_internal(
+        typ: EncoderType,
+        tokens: impl Iterator<Item = (TokenString, TokenInt)>,
+        special_tokens: impl Iterator<Item = (&'static str, TokenInt)>,
+        regex: &'static str,
+    ) -> Self {
+        let encoder = hash::TokenEncoder::new(tokens);
+        let decoder = encoder.invert();
+
+        let mut sorted_token_bytes = encoder.token_strings().cloned().collect::<Vec<_>>();
+        sorted_token_bytes.sort_unstable();
+
+        let special_token_encoder = hash::TokenEncoder::new(special_tokens);
+        let special_token_decoder = special_token_encoder.invert();
+
+        Self {
+            typ,
+            encode: encoder,
+            special_tokens_encode: special_token_encoder,
+            decode: decoder,
+            special_tokens_decode: special_token_decoder,
+            regex: fancy_regex::Regex::new(regex).expect("BUG: Invalid regex"),
+            sorted_token_bytes,
         }
     }
 }

@@ -42,6 +42,11 @@ impl TokenEncoder {
     pub fn invert(&self) -> TokenDecoder {
         TokenDecoder::new(self.0.clone())
     }
+
+    /// All token strings in the encoder
+    pub fn token_strings(&self) -> impl Iterator<Item = &TokenString> {
+        self.0.keys()
+    }
 }
 
 impl TokenDecoder {
