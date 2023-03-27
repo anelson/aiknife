@@ -8,8 +8,11 @@ pub mod tiktoken;
 //
 // It imports `crate::byte_pair_split` but because we're pulling in that code in a submodule
 // `tiktoken`, there won't be a `crate::byte_pair_split` unless we re-export it here
-#[allow(unused_imports, dead_code)] // This is actually used by `tiktoken` above
+#[allow(unused_imports, dead_code)]
+// This is actually used by `tiktoken` above
 use tiktoken::byte_pair_split;
+
+// TODO: Start making tests using the tokenizer data from `tokens`.
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

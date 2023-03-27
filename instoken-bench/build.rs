@@ -26,13 +26,13 @@ use std::path::Path;
 fn main() -> Result<(), Box<dyn std::error::Error + Sync + Send + 'static>> {
     const INPUT_TIKTOKEN_SRC: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tiktoken/src/lib.rs");
 
-    let input_tiktoken_src = std::fs::read_to_string(INPUT_TIKTOKEN_SRC)
-    .unwrap_or_else(|e| {
+    let input_tiktoken_src = std::fs::read_to_string(INPUT_TIKTOKEN_SRC).unwrap_or_else(|e| {
         panic!(
             "Failed to open tiktoken source file `{INPUT_TIKTOKEN_SRC}`.  \
             Did you forget to run `git submodule update --init --recursive` after checking out this repo? \
             \
-            Error details: {e}");
+            Error details: {e}"
+        );
     });
 
     let output_toktoken_src =

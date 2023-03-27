@@ -8,6 +8,7 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+instoken = { path = "../instoken" }
 
 # These dependencies are needed because the tiktoken Rust code that we include
 # won't compile without them.

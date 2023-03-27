@@ -66,9 +66,7 @@ impl Token {
         let original = match encoder.decode(vec![token]) {
             Ok(string) => Some(string),
             Err(e) => {
-                error!(err = e.to_string(),
-                            token,
-                            "Decoding token into a string failed.  Probably this token isn't on a UTF-8 boundary");
+                error!(err = e.to_string(), token, "Decoding token into a string failed.  Probably this token isn't on a UTF-8 boundary");
                 None
             }
         };
