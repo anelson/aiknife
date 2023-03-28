@@ -7,7 +7,7 @@
 //! will drag along a dependency on the fucking Python runtime, so perhaps it's time to get off
 //! that high horse and accept that this data is going to end up on your computer taking up space
 //! on way or another, so it may as well be in the executable image where it's most convenient.
-use crate::EncoderType;
+use crate::EncodingType;
 use base64::{engine::general_purpose, Engine as _};
 use rust_embed::RustEmbed;
 use std::io::{BufRead, BufReader};
@@ -38,12 +38,12 @@ struct R50kBase;
 /// The data is represented as an iterator that yields at tuple of `(bytes, token)`.  This can then
 /// be processed in whatever way the caller requires.  Typically it's made into a hash map but
 /// other more exotic structures are also possible.
-pub fn get_token_data(tokenizer: EncoderType) -> impl Iterator<Item = (Vec<u8>, usize)> {
+pub fn get_token_data(tokenizer: EncodingType) -> impl Iterator<Item = (Vec<u8>, usize)> {
     match tokenizer {
-        EncoderType::Cl100kBase => load_data(Cl100kBase::get("cl100k_base.tiktoken")),
-        EncoderType::Gpt2 => todo!("TODO: GPT-2 requires processing two files into mergeable ranks.  Do that if this is important"),
-        EncoderType::P50kBase | EncoderType::P50kEdit => load_data(P50kBase::get("p50k_base.tiktoken")),
-        EncoderType::R50kBase => load_data(R50kBase::get("r50k_base.tiktoken")),
+        EncodingType::Cl100kBase => load_data(Cl100kBase::get("cl100k_base.tiktoken")),
+        EncodingType::Gpt2 => todo!("TODO: GPT-2 requires processing two files into mergeable ranks.  Do that if this is important"),
+        EncodingType::P50kBase | EncodingType::P50kEdit => load_data(P50kBase::get("p50k_base.tiktoken")),
+        EncodingType::R50kBase => load_data(R50kBase::get("r50k_base.tiktoken")),
     }
 }
 

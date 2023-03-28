@@ -962,6 +962,7 @@ dependencies = [
 name = "instoken"
 version = "0.1.0"
 dependencies = [
+ "aho-corasick",
  "base64",
  "fancy-regex 0.11.0",
  "once_cell",

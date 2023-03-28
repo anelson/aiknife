@@ -20,9 +20,6 @@ curl https://openaipublic.blob.core.windows.net/encodings/r50k_base.tiktoken -o 
 mkdir -p "${SCRIPT_DIR}/p50k_base"
 curl https://openaipublic.blob.core.windows.net/encodings/p50k_base.tiktoken -o "${SCRIPT_DIR}/p50k_base/p50k_base.tiktoken"
 
-mkdir -p "${SCRIPT_DIR}/p50k_edit"
-curl https://openaipublic.blob.core.windows.net/encodings/p50k_base.tiktoken -o "${SCRIPT_DIR}/p50k_edit/p50k_edit.tiktoken"
-
 mkdir -p "${SCRIPT_DIR}/cl100k_base"
 curl https://openaipublic.blob.core.windows.net/encodings/cl100k_base.tiktoken -o "${SCRIPT_DIR}/cl100k_base/cl100k_base.tiktoken"
 
