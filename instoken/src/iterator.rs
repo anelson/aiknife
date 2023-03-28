@@ -8,7 +8,7 @@ use std::sync::Arc;
 /// The internal state of all iterator variants.  Different iterators work differently and yield
 /// different results, but this is the beating heart of them all
 #[derive(Clone)]
-struct IteratorState<'a> {
+pub(crate) struct IteratorState<'a> {
     /// The encoder that defines the parameters for the encoding this iterator applies
     params: Arc<BpeEncoderParams>,
 
@@ -17,7 +17,7 @@ struct IteratorState<'a> {
 }
 
 impl<'a> IteratorState<'a> {
-    fn new(params: Arc<BpeEncoderParams>, text: &'a str) -> Self {
+    pub(crate) fn new(params: Arc<BpeEncoderParams>, text: &'a str) -> Self {
         Self { params, text }
     }
 }
@@ -57,7 +57,9 @@ impl<'a> Iterator for WordIterator<'a> {
 
 /// The iterator which yields the tokens from a string of text or bytes encoded without regard for
 /// special tokens.
-struct EncodeOrdinaryIterator<'a> {
+///
+/// See [`crate::Encoding::encode_ordinary`]
+pub struct EncodeOrdinaryIterator<'a> {
     state: IteratorState<'a>,
     words: WordIterator<'a>,
 
@@ -68,7 +70,7 @@ struct EncodeOrdinaryIterator<'a> {
 }
 
 impl<'a> EncodeOrdinaryIterator<'a> {
-    fn new(state: IteratorState<'a>) -> Self {
+    pub(crate) fn new(state: IteratorState<'a>) -> Self {
         Self {
             words: WordIterator::new(state.clone()),
             state,

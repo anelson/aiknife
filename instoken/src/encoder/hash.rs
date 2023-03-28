@@ -4,17 +4,17 @@
 //! This is isolated to this module to make it easier to experiment with different impls.
 use crate::token::{TokenInt, TokenString};
 
-pub use rustc_hash::FxHashMap as HashMap;
+pub use rustc_hash::FxHashMap as InstokenHashMap;
 
 /// Encoders maintain the mapping between byte sequences and the ranks assigned to them in the
 /// vocabulary.
 #[derive(Clone, Debug)]
-pub struct TokenEncoder(HashMap<TokenString, TokenInt>);
+pub struct TokenEncoder(InstokenHashMap<TokenString, TokenInt>);
 
 /// Decoders maintain the reverse mapping, from the integer representation of the token to the
 /// corresponding byte sequence.
 #[derive(Clone, Debug)]
-pub struct TokenDecoder(HashMap<TokenInt, TokenString>);
+pub struct TokenDecoder(InstokenHashMap<TokenInt, TokenString>);
 
 // Any iterator of token string/ token int pairs can be used to construct either an encoder or
 // decoder

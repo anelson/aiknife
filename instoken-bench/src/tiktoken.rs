@@ -14,3 +14,24 @@ pub fn byte_pair_merge<T>(
 ) -> Vec<T> {
     _byte_pair_merge(piece, ranks, f)
 }
+
+// Hack to expose the constructor for CoreCPE which is normally only available from Python
+pub struct CoreBPEHack(CoreBPE);
+
+impl CoreBPEHack {
+    pub fn new(
+        encoder: TiktokenHashMap<Vec<u8>, usize>,
+        special_tokens_encoder: TiktokenHashMap<String, usize>,
+        pattern: &str,
+    ) -> PyResult<Self> {
+        Ok(Self(CoreBPE::new(
+            encoder,
+            special_tokens_encoder,
+            pattern,
+        )?))
+    }
+
+    pub fn encode_ordinary(&self, text: &str) -> Vec<usize> {
+        self.0._encode_ordinary_native(text)
+    }
+}

@@ -6,7 +6,8 @@ use strum::{EnumIter, EnumString, EnumVariantNames, IntoEnumIterator};
 mod data;
 mod hash;
 
-pub(crate) use hash::{TokenDecoder, TokenEncoder};
+pub use hash::InstokenHashMap;
+pub use hash::{TokenDecoder, TokenEncoder};
 
 /// The tokenizer encoding to use to tokenize text.
 ///

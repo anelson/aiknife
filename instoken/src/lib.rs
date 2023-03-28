@@ -1,3 +1,4 @@
+use std::borrow::Borrow;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -12,6 +13,10 @@ pub use encoder::*;
 pub use error::*;
 pub use iterator::*;
 pub use token::*;
+
+/// The special hashmap type used by this implementation.  We can change this if needed for better
+/// performance, so dont' make any assumptions about what this is.
+pub use encoder::InstokenHashMap;
 
 pub type Result<T> = std::result::Result<T, InstokenError>;
 
@@ -80,8 +85,8 @@ impl Encoding {
     ///
     /// If you don't require detecting special tokens, use the `ordinary` versions, as they are
     /// slightly faster and also simpler to use.
-    pub fn encode_ordinary(&self, text: impl AsRef<str>) -> Vec<TokenInt> {
-        todo!()
+    pub fn encode_ordinary<'text>(&self, text: &'text str) -> EncodeOrdinaryIterator<'text> {
+        EncodeOrdinaryIterator::new(IteratorState::new(self.params.clone(), text))
     }
 
     /// Encode the specified text into a sequence of tokens, including encoding
@@ -161,6 +166,13 @@ impl Encoding {
     /// to return the bytes themselves.  It can fail with `None` under the same circumstances.
     fn get_token_len(&self, token: TokenInt) -> Option<usize> {
         todo!()
+    }
+
+    /// Get a reference to the parameters used to create this encoding
+    /// Most callers should not have any need to delve into these implementation details but they're
+    /// there if you need them.
+    pub fn params(&self) -> &BpeEncoderParams {
+        &self.params
     }
 }
 
