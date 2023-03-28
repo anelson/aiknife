@@ -31,23 +31,23 @@ pub enum EncodingType {
 
 /// The description of a particular BPE encoding scheme
 pub struct BpeEncoderParams {
-    pub(crate) typ: EncodingType,
+    pub typ: EncodingType,
 
     /// Mapping of byte sequences to integer token ranks
-    pub(crate) encode: hash::TokenEncoder,
+    pub encode: hash::TokenEncoder,
 
     /// Like [`encode`] but for "special" tokens.
     ///
     /// These should not be present in `encode`
-    pub(crate) special_tokens_encode: hash::TokenEncoder,
+    pub special_tokens_encode: hash::TokenEncoder,
 
     /// Mapping of integer token ranks back to byte sequences
-    pub(crate) decode: hash::TokenDecoder,
+    pub decode: hash::TokenDecoder,
 
     /// Like [`decode`] but for "special" tokens.
     ///
     /// These should not be present in `decode`
-    pub(crate) special_tokens_decode: hash::TokenDecoder,
+    pub special_tokens_decode: hash::TokenDecoder,
 
     /// Regex used to break up text into approximate word boundaries
     ///
@@ -56,18 +56,18 @@ pub struct BpeEncoderParams {
     /// impl is needed
     ///
     /// TODO: would it be faster to simply re-implement the "fancy" regex logic in Rust code?
-    pub(crate) regex: fancy_regex::Regex,
+    pub regex: fancy_regex::Regex,
 
     /// A/C automaton for finding special tokens in text
-    pub(crate) special_tokens_finder: aho_corasick::AhoCorasick,
+    pub special_tokens_finder: aho_corasick::AhoCorasick,
 
     /// All token strings, sorted lexicographically
-    pub(crate) sorted_token_bytes: Vec<TokenString>,
+    pub sorted_token_bytes: Vec<TokenString>,
 
     /// The mean length of a token in bytes.
     ///
     /// This is used when we need to estimate how many tokens are likely to be in a string.
-    pub(crate) mean_token_len: usize,
+    pub mean_token_len: usize,
 }
 
 impl BpeEncoderParams {

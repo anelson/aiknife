@@ -7,6 +7,7 @@ mod error;
 mod iterator;
 mod token;
 
+pub use bpe::*;
 pub use encoder::*;
 pub use error::*;
 pub use iterator::*;

@@ -46,6 +46,12 @@ fn byte_pair_merge<T>(
     encoder: &TokenEncoder,
     f: impl Fn(std::ops::Range<usize>) -> T,
 ) -> Vec<T> {
+    // The encoding logic will never call this with an empty slice, but we expose this publically
+    // via `byte_pair_merge` so we should handle this case cleanly
+    if word.is_empty() {
+        return vec![];
+    }
+
     // This is a vector of (start, rank).
     // The rank is of the byte pair starting at position start.
     // The rank of the last item in the vector is not a valid value.
@@ -124,4 +130,44 @@ fn byte_pair_merge<T>(
         out.push(f(parts[i].0..parts[i + 1].0));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    // Most tests for this code is in `instoken-bench` where the code is tested against the actual
+    // tiktoken implementation
+
+    use super::*;
+    use crate::EncodingType;
+
+    #[test]
+    fn smoke_test() {
+        let params = crate::BpeEncoderParams::load(EncodingType::Cl100kBase);
+
+        // This isn't actually the kind of string that would be passed in, it would first be broken
+        // up into approximately words, but any string be able to be encoded
+        const INPUT_TEXT: &str = "hello world, go fuck yourself!";
+
+        let tokens = byte_pair_encode(INPUT_TEXT.as_bytes(), &params.encode);
+
+        assert!(!tokens.is_empty());
+
+        println!("Tokens: {:?}", tokens);
+
+        let byte_strings = byte_pair_split(INPUT_TEXT.as_bytes(), &params.encode);
+
+        assert_eq!(tokens.len(), byte_strings.len());
+
+        for (token, byte_string) in tokens.into_iter().zip(byte_strings) {
+            println!(" {token} => '{}'", String::from_utf8_lossy(byte_string));
+        }
+    }
+
+    #[test]
+    fn blank_string() {
+        let params = crate::BpeEncoderParams::load(EncodingType::Cl100kBase);
+        let tokens = byte_pair_encode(b"", &params.encode);
+
+        assert!(tokens.is_empty());
+    }
 }
