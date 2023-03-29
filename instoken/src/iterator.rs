@@ -1,6 +1,5 @@
 //! Contains the implementation of the bulk of the tokenization logic, implemented as a Rust
 //! [`Iterator`].
-
 use crate::{bpe, BpeEncoderParams, TokenInt};
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -77,6 +76,12 @@ impl<'a> EncodeOrdinaryIterator<'a> {
             current_word_tokens: VecDeque::new(),
         }
     }
+
+    /// Augment this iterator of tokens, to include the byte offset in the input text where the
+    /// token appears, and the byte string contents of that token as it appears in the input text.
+    pub fn with_details(self) -> TokenDetailsIterator<'a, Self> {
+        TokenDetailsIterator::new(self.state.clone(), self)
+    }
 }
 
 impl<'a> Iterator for EncodeOrdinaryIterator<'a> {
@@ -130,11 +135,68 @@ impl<'a> Iterator for EncodeOrdinaryIterator<'a> {
     }
 }
 
+/// An iterator which wraps one of the other iterators, and yields not only the integer token
+/// [`TokenInt`] but also the byte string that the token came from, and the position of the token
+/// in the input text
+///
+/// To get this additional detail from an iterator of tokens, see the `with_details` method on a
+/// token iterator.
+///
+/// The tuple this iterator yields is of the form `(token_int, byte_offset, byte_string)`
+///
+/// Note that this iterator adds some additional overhead to retrieve the byte strings for each
+/// token, so don't use it unless you need this additional context.
+pub struct TokenDetailsIterator<'a, I> {
+    state: IteratorState<'a>,
+    tokens: I,
+    pos: usize,
+}
+
+impl<'a, I: Iterator<Item = TokenInt>> TokenDetailsIterator<'a, I> {
+    pub(crate) fn new(state: IteratorState<'a>, tokens: I) -> Self {
+        Self {
+            state,
+            tokens,
+            pos: 0,
+        }
+    }
+}
+
+impl<'a, I: Iterator<Item = TokenInt>> Iterator for TokenDetailsIterator<'a, I> {
+    type Item = (TokenInt, usize, &'a [u8]);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.tokens.next().map(|token| {
+            // How long is this token's byte string?
+            let token_len = self
+                .state
+                .params
+                .decode
+                .bytes_for_token(token)
+                .expect("BUG: token not found in decoding")
+                .len();
+
+            // Unfortunately there is no guarantee that tokens fall exactly on UTF-8 code points,
+            // so we can't assume individual tokens are strings, even though we know the original
+            // input string is.
+            let token_bytes = &self.state.text.as_bytes()[self.pos..self.pos + token_len];
+            let offset = self.pos;
+            self.pos += token_len;
+
+            (token, offset, token_bytes)
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.tokens.size_hint()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::EncodingType;
-
     use super::*;
+    use crate::EncodingType;
+    use proptest::prelude::*;
 
     #[test]
     fn word_iterator_works() {
@@ -176,5 +238,81 @@ mod tests {
             )
             .as_slice()
         );
+    }
+
+    #[test]
+    fn ordinary_tokens_iterator_works() {
+        fn get_detailed_tokens(
+            params: Arc<BpeEncoderParams>,
+            text: &str,
+        ) -> Vec<(TokenInt, usize, &str)> {
+            let tokens = EncodeOrdinaryIterator::new(IteratorState::new(params, text));
+            let tokens = tokens.with_details();
+
+            // At the API level we can't assume tokens are always UTF-8 strings, however inside
+            // this test we only test tokens that are, so we can assume this and make the tests
+            // more readable
+            let tokens = tokens.map(|(token, offset, byte_string)| {
+                (
+                    token,
+                    offset,
+                    std::str::from_utf8(byte_string).expect("BUG: expected UTF-8 token"),
+                )
+            });
+            tokens.collect()
+        }
+
+        let params = crate::BpeEncoderParams::load(EncodingType::Cl100kBase);
+
+        assert!(get_detailed_tokens(params.clone(), "").is_empty());
+        assert_eq!(
+            &[(8134, 0, "foo")],
+            get_detailed_tokens(params.clone(), "foo").as_slice()
+        );
+        assert_eq!(
+            &[
+                (69, 0, "f"),
+                (686, 1, "ear"),
+                (374, 4, " is"),
+                (279, 7, " the"),
+                (4059, 11, " mind"),
+                (50965, 16, " kk"),
+                (11088, 19, "kill"),
+                (1565, 23, "ler")
+            ],
+            get_detailed_tokens(params, "fear is the mind kkkilller").as_slice()
+        );
+    }
+
+    proptest! {
+        /// Run the encoding against many example strings, testing that the detailed iterator
+        /// yields values that can be used to reconstruct the original string.
+        ///
+        /// This isn't verifying that the tokenization is correct; that's done in the `bench`
+        /// crate and uses `tiktoken` as the reference.  It's verifying that the iterator works
+        /// right, assuming the tokenization si correct.
+        #[test]
+        fn detailed_iterator_correct(s in "\\PC*") {
+            let encoding = crate::Encoding::new(EncodingType::Cl100kBase);
+
+            let tokens = encoding.encode_ordinary(&s);
+            let tokens = tokens.with_details().collect::<Vec<_>>();
+
+            // Sanity check the offsets from the details, and re-construct the original string with
+            // the given byte strings
+            let mut original_text = Vec::with_capacity(s.len());
+
+            let mut next_offset = 0;
+            for (_token, offset, byte_string) in tokens {
+                assert_eq!(offset, next_offset);
+                assert_eq!(byte_string, &s.as_bytes()[offset..offset+byte_string.len()]);
+                original_text.extend_from_slice(byte_string);
+                next_offset = offset + byte_string.len();
+            }
+
+            let original_text = String::from_utf8(original_text).expect("BUG: expected UTF-8 string");
+
+            assert_eq!(s, original_text);
+        }
     }
 }

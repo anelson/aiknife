@@ -981,6 +981,7 @@ dependencies = [
  "base64",
  "fancy-regex 0.11.0",
  "once_cell",
+ "proptest",
  "regex",
  "rust-embed",
  "rustc-hash",

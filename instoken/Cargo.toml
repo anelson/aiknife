@@ -16,3 +16,6 @@ rust-embed = { version = "6.6.1", features = ["compression"] }
 rustc-hash = "1.1.0"
 snafu = "0.7.4"
 strum = { version = "0.24.1", features = ["derive"] }
+
+[dev-dependencies]
+proptest = "1.1.0"
