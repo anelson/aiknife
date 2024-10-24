@@ -48,13 +48,13 @@ impl Commands {
         use Commands::*;
         match self {
             Tokenize { files, count } => {
-                let tokens = if !files.is_empty() {
+                let _tokens = if !files.is_empty() {
                     info!("Printing testing lists...");
                     info!("  {files:?}");
-                    aiknife::tokenize_files(files).await?
+                    aiknife::tokenize_files(aiknife::Tokenizer::Cl100kBase, files).await?;
                 } else {
                     info!("Not printing testing lists...");
-                    aiknife::tokenize_stream(std::io::stdin()).await?
+                    aiknife::tokenize_stream(aiknife::Tokenizer::Cl100kBase, std::io::stdin()).await?;
                 };
 
                 if count {

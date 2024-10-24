@@ -28,3 +28,10 @@ The name was suggested by ChatGPT's GPT-4 model based on the following interacti
 
 Being as I am a pretty low-effort guy when it comes to snappy names for things, this was a no-brainer.
 
+## UI
+
+An experimental UI is available in the `aiknife-ui` crate. It is built with Tauri and React.  To use, run:
+
+```bash
+cd aiknife-ui && pnpm install && pnpm tauri dev
+```

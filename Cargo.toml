@@ -1,3 +1,4 @@
 [workspace]
+resolver = "2"
 
 members = ["aiknife", "aik", "instoken", "instoken-bench", "aiknife-ui/src-tauri"]
