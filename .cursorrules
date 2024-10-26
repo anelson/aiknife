@@ -1,0 +1,8 @@
+This is a Rust workspace for a project that has both a CLI (`aik`) and a UI (`aiknife-ui`).  
+
+The UI is a Tauri application which uses React for the front-end.  
+
+`aiknife-ui/src` contains the React code, while `aiknife-ui/src-tauri` contains the Rust code.
+
+For the React part of the code, only Typescript is used and types should always be included.
+
