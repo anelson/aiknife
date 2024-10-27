@@ -1,17 +1,21 @@
 [package]
+edition = "2021"
 name = "aiknife"
 version = "0.1.0"
-edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+# Enable this feature to derive the `specta::Type` trait for all public serializable types
+# Used when the front-end is a Tauri app
+tauri = ["dep:specta"]
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
+futures = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
+specta = { workspace = true, optional = true }
+tiktoken-rs = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-futures = { workspace = true }
-tiktoken-rs = { workspace = true }
-specta = { workspace = true }
-specta-typescript = { workspace = true }
+uuid = { workspace = true }

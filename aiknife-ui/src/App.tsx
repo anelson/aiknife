@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { commands, Message } from "./bindings";
+import { commands, Message, SessionHandle } from "./bindings";
 import "./App.css";
 
 interface TooltipButtonProps {
@@ -28,30 +28,42 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [session, setSession] = useState<SessionHandle | null>(null);
 
   useEffect(() => {
     checkApiKey();
+    createSession();
   }, []);
 
   const checkApiKey = async () => {
     try {
-      await commands.checkApiKeyCommand();
-      setApiKeyError(null); // Clear any previous error if the check succeeds
+      await commands.checkApiKey();
+      setApiKeyError(null);
     } catch (error) {
+      setApiKeyError(error as string);
+    }
+  };
+
+  const createSession = async () => {
+    try {
+      const newSession = await commands.newSession();
+      setSession(newSession);
+    } catch (error) {
+      console.error("Error creating session:", error);
       setApiKeyError(error as string);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || apiKeyError) return;
+    if (!input.trim() || apiKeyError || !session) return;
 
     const userMessage: Message = { role: "user", content: input };
-    setMessages([...messages, userMessage]);
+    setMessages((prevMessages) => [...prevMessages, userMessage]);
     setInput("");
 
     try {
-      const response = await commands.sendMessage([...messages, userMessage]);
+      const response = await commands.sendMessage(session, input);
       const assistantMessage: Message = {
         role: "assistant",
         content: response,
@@ -85,11 +97,11 @@ function App() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type your message..."
-            disabled={!!apiKeyError}
+            disabled={!!apiKeyError || !session}
           />
           <TooltipButton
-            disabled={!!apiKeyError}
-            tooltip={apiKeyError || ""}
+            disabled={!!apiKeyError || !session}
+            tooltip={apiKeyError || (!session ? "Creating session..." : "")}
             onClick={handleSubmit}
           >
             {apiKeyError ? "⚠️" : "Send"}

@@ -5,11 +5,14 @@
 
 
 export const commands = {
-async sendMessage(messages: Message[]) : Promise<string> {
-    return await TAURI_INVOKE("send_message", { messages });
+async newSession() : Promise<SessionHandle> {
+    return await TAURI_INVOKE("new_session");
 },
-async checkApiKeyCommand() : Promise<null> {
-    return await TAURI_INVOKE("check_api_key_command");
+async sendMessage(session: SessionHandle, message: string) : Promise<string> {
+    return await TAURI_INVOKE("send_message", { session, message });
+},
+async checkApiKey() : Promise<null> {
+    return await TAURI_INVOKE("check_api_key");
 }
 }
 
@@ -23,7 +26,7 @@ async checkApiKeyCommand() : Promise<null> {
 
 /** user-defined types **/
 
-export type Message = { role: string; content: string }
+export type SessionHandle = { id: string }
 
 /** tauri-specta globals **/
 
