@@ -1,11 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { commands, Message } from "./bindings";
 import "./App.css";
-
-interface Message {
-  role: 'user' | 'assistant';
-  content: string;
-}
 
 interface TooltipButtonProps {
   disabled: boolean;
@@ -14,7 +10,12 @@ interface TooltipButtonProps {
   children: React.ReactNode;
 }
 
-const TooltipButton: React.FC<TooltipButtonProps> = ({ disabled, tooltip, onClick, children }) => (
+const TooltipButton: React.FC<TooltipButtonProps> = ({
+  disabled,
+  tooltip,
+  onClick,
+  children,
+}) => (
   <div className="tooltip-container">
     <button type="submit" disabled={disabled} onClick={onClick}>
       {children}
@@ -25,7 +26,7 @@ const TooltipButton: React.FC<TooltipButtonProps> = ({ disabled, tooltip, onClic
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,7 +35,7 @@ function App() {
 
   const checkApiKey = async () => {
     try {
-      await invoke('check_api_key_command');
+      await commands.checkApiKeyCommand();
       setApiKeyError(null); // Clear any previous error if the check succeeds
     } catch (error) {
       setApiKeyError(error as string);
@@ -45,18 +46,19 @@ function App() {
     e.preventDefault();
     if (!input.trim() || apiKeyError) return;
 
-    const userMessage: Message = { role: 'user', content: input };
+    const userMessage: Message = { role: "user", content: input };
     setMessages([...messages, userMessage]);
-    setInput('');
+    setInput("");
 
     try {
-      const response = await invoke<string>('send_message', {
-        messages: [...messages, userMessage],
-      });
-      const assistantMessage: Message = { role: 'assistant', content: response };
+      const response = await commands.sendMessage([...messages, userMessage]);
+      const assistantMessage: Message = {
+        role: "assistant",
+        content: response,
+      };
       setMessages((prevMessages) => [...prevMessages, assistantMessage]);
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error:", error);
       setApiKeyError(error as string);
     }
   };
@@ -87,10 +89,10 @@ function App() {
           />
           <TooltipButton
             disabled={!!apiKeyError}
-            tooltip={apiKeyError || ''}
+            tooltip={apiKeyError || ""}
             onClick={handleSubmit}
           >
-            {apiKeyError ? '⚠️' : 'Send'}
+            {apiKeyError ? "⚠️" : "Send"}
           </TooltipButton>
         </form>
       </div>

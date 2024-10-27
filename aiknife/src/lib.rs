@@ -12,32 +12,35 @@ mod tests {
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::env;
 
-#[derive(Serialize)]
+#[derive(Serialize, Type)]
 struct ChatCompletionRequest {
     model: String,
     messages: Vec<Message>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Type)]
 pub struct Message {
     role: String,
     content: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Type)]
 struct ChatCompletionResponse {
     choices: Vec<Choice>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Type)]
 struct Choice {
     message: Message,
 }
 
 pub fn check_api_key() -> Result<()> {
-    env::var("OPENAI_API_KEY").context("OpenAI API key is missing. Please set the OPENAI_API_KEY environment variable.")?;
+    env::var("OPENAI_API_KEY").context(
+        "OpenAI API key is missing. Please set the OPENAI_API_KEY environment variable.",
+    )?;
     Ok(())
 }
 
