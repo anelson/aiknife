@@ -1,0 +1,92 @@
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+  color: #0f0f0f;
+  background-color: #f6f6f6;
+}
+
+.App {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+h1 {
+  text-align: center;
+}
+
+.chat-container {
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  padding: 10px;
+  height: 400px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+.message {
+  margin-bottom: 10px;
+  padding: 5px 10px;
+  border-radius: 5px;
+}
+
+.user {
+  background-color: #e6f2ff;
+  text-align: right;
+}
+
+.assistant {
+  background-color: #f0f0f0;
+}
+
+form {
+  display: flex;
+}
+
+input[type="text"] {
+  flex-grow: 1;
+  padding: 5px;
+  margin-right: 10px;
+}
+
+button {
+  padding: 5px 10px;
+}
+
+/* Dark mode styles */
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #f6f6f6;
+    background-color: #1a1a1a;
+  }
+
+  .chat-container {
+    border-color: #444;
+  }
+
+  .user {
+    background-color: #2a4d69;
+    color: #ffffff;
+  }
+
+  .assistant {
+    background-color: #3c3c3c;
+    color: #ffffff;
+  }
+
+  input[type="text"] {
+    background-color: #333333;
+    color: #ffffff;
+    border: 1px solid #4a4a4a;
+  }
+
+  button {
+    background-color: #3dd5f3;
+    color: #1a1a1a;
+    border: none;
+  }
+
+  button:hover {
+    background-color: #66e0ff;
+  }
+}

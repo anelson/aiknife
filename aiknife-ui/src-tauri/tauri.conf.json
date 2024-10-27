@@ -10,16 +10,18 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "security": {
+      "csp": null
+    },
     "windows": [
       {
+        "fullscreen": false,
+        "resizable": true,
         "title": "AI Knife",
         "width": 800,
         "height": 600
       }
-    ],
-    "security": {
-      "csp": null
-    }
+    ]
   },
   "bundle": {
     "active": true,

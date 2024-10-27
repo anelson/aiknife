@@ -1,19 +1,19 @@
 //! Tokenization functions which process text into tokens suitable for use with OpenAI APIs
-use crate::Result;
+use anyhow::{Context, Result};
 use futures::{Stream, StreamExt};
-use snafu::ResultExt;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::io::Read;
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
+use tiktoken_rs as tiktoken;
 use tokio::io::AsyncReadExt;
 use tracing::*;
 
-pub type Tokenizer = tiktoken_rs::tokenizer::Tokenizer;
-pub type Encoder = tiktoken_rs::CoreBPE;
+pub type Tokenizer = tiktoken::tokenizer::Tokenizer;
+pub type Encoder = tiktoken::CoreBPE;
 
 pub const TOKENIZERS: &[Tokenizer] = &[
     Tokenizer::Cl100kBase,
@@ -23,25 +23,26 @@ pub const TOKENIZERS: &[Tokenizer] = &[
     Tokenizer::Gpt2,
 ];
 
-/// Get the `tiktokrne-rs` encoder that corresponds to the tokenizing algorithm used by OpenAI for
+/// Get the `tiktoken-rs` encoder that corresponds to the tokenizing algorithm used by OpenAI for
 /// ChatGPT models and `text-embedding-ada-002`
 fn cl100k_base_encoder() -> Result<Encoder> {
-    get_encoder_for_tokenizer(tiktoken_rs::tokenizer::Tokenizer::Cl100kBase)
+    get_encoder_for_tokenizer(tiktoken::tokenizer::Tokenizer::Cl100kBase)
 }
 
 pub fn get_tokenizer_name(tokenizer: Tokenizer) -> &'static str {
     match tokenizer {
-        tiktoken_rs::tokenizer::Tokenizer::Cl100kBase => "cl100k_base",
-        tiktoken_rs::tokenizer::Tokenizer::P50kBase => "p50k_base",
-        tiktoken_rs::tokenizer::Tokenizer::R50kBase => "r50k_base",
-        tiktoken_rs::tokenizer::Tokenizer::P50kEdit => "p50k_edit",
-        tiktoken_rs::tokenizer::Tokenizer::Gpt2 => "gpt2",
+        tiktoken::tokenizer::Tokenizer::Cl100kBase => "cl100k_base",
+        tiktoken::tokenizer::Tokenizer::P50kBase => "p50k_base",
+        tiktoken::tokenizer::Tokenizer::R50kBase => "r50k_base",
+        tiktoken::tokenizer::Tokenizer::P50kEdit => "p50k_edit",
+        tiktoken::tokenizer::Tokenizer::Gpt2 => "gpt2",
+        tiktoken::tokenizer::Tokenizer::O200kBase => "o200k_base",
     }
 }
 
 pub fn get_encoder_for_tokenizer(tokenizer: Tokenizer) -> Result<Encoder> {
-    tiktoken_rs::get_bpe_from_tokenizer(tokenizer)
-        .map_err(|e| crate::error::TikTokenRsSnafu { inner: e }.build())
+    tiktoken::get_bpe_from_tokenizer(tokenizer)
+        .map_err(|e| anyhow::anyhow!("Failed to get encoder: {}", e))
 }
 
 /// A token produced by the tokenizer.
@@ -62,7 +63,7 @@ pub struct Token {
 }
 
 impl Token {
-    fn new(token: usize, encoder: &tiktoken_rs::CoreBPE) -> Self {
+    fn new(token: usize, encoder: &tiktoken::CoreBPE) -> Self {
         let original = match encoder.decode(vec![token]) {
             Ok(string) => Some(string),
             Err(e) => {
@@ -163,22 +164,19 @@ pub async fn tokenize_file(
 ) -> Result<(Arc<PathBuf>, Vec<FileToken>)> {
     let path = path.into();
 
-    // TODO: this implements `Clone`, is it very expensive to create?  It looks like it contains
-    // RegEx objects, so it might be worthwhile to create this one and then clone it as needed when
-    // handling multiple files in a batch.
     let encoder = get_encoder_for_tokenizer(tokenizer)?;
 
     let mut file = tokio::fs::File::open(&path)
         .await
-        .with_context(|_| crate::error::FileIoSnafu { path: path.clone() })?;
+        .with_context(|| format!("Failed to open file: {}", path.display()))?;
     let metadata = file
         .metadata()
         .await
-        .with_context(|_| crate::error::FileIoSnafu { path: path.clone() })?;
+        .with_context(|| format!("Failed to get metadata for file: {}", path.display()))?;
     let mut contents = Vec::with_capacity(metadata.len() as usize);
     file.read_to_end(&mut contents)
         .await
-        .with_context(|_| crate::error::FileIoSnafu { path: path.clone() })?;
+        .with_context(|| format!("Failed to read file: {}", path.display()))?;
 
     // The file might or might not be valid Unicode text.  If it contains some invalid Unicode code
     // points, rather than fail the encoding, just substitute them

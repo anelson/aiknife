@@ -4,13 +4,13 @@ windows:
   - window_name: editor
     focus: true
     panes:
-        - vim
+      - vim
   - window_name: rust shell
     panes:
-        - pane
-  - window_name: curl shell
+      - pane
+  - window_name: tauri shell
     panes:
-        - pane
+      - pane
   - window_name: misc shell
     panes:
-        - pane
+      - pane

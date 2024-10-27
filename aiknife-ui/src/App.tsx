@@ -1,50 +1,100 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
+import React, { useState, useEffect } from 'react';
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+interface Message {
+  role: 'user' | 'assistant';
+  content: string;
+}
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+interface TooltipButtonProps {
+  disabled: boolean;
+  tooltip: string;
+  onClick: () => void;
+  children: React.ReactNode;
+}
+
+const TooltipButton: React.FC<TooltipButtonProps> = ({ disabled, tooltip, onClick, children }) => (
+  <div className="tooltip-container">
+    <button type="submit" disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
+    {disabled && <span className="tooltip">{tooltip}</span>}
+  </div>
+);
+
+function App() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+
+  useEffect(() => {
+    checkApiKey();
+  }, []);
+
+  const checkApiKey = async () => {
+    try {
+      await invoke('check_api_key_command');
+      setApiKeyError(null); // Clear any previous error if the check succeeds
+    } catch (error) {
+      setApiKeyError(error as string);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || apiKeyError) return;
+
+    const userMessage: Message = { role: 'user', content: input };
+    setMessages([...messages, userMessage]);
+    setInput('');
+
+    try {
+      const response = await invoke<string>('send_message', {
+        messages: [...messages, userMessage],
+      });
+      const assistantMessage: Message = { role: 'assistant', content: response };
+      setMessages((prevMessages) => [...prevMessages, assistantMessage]);
+    } catch (error) {
+      console.error('Error:', error);
+      setApiKeyError(error as string);
+    }
+  };
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vitejs.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://reactjs.org" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="App">
+      {apiKeyError && (
+        <div className="error-banner">
+          <p>{apiKeyError}</p>
+        </div>
+      )}
+      <div className="app-content">
+        <h1>Simple ChatGPT Clone</h1>
+        <div className="chat-container">
+          {messages.map((message, index) => (
+            <div key={index} className={`message ${message.role}`}>
+              {message.content}
+            </div>
+          ))}
+        </div>
+        <form onSubmit={handleSubmit}>
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type your message..."
+            disabled={!!apiKeyError}
+          />
+          <TooltipButton
+            disabled={!!apiKeyError}
+            tooltip={apiKeyError || ''}
+            onClick={handleSubmit}
+          >
+            {apiKeyError ? '⚠️' : 'Send'}
+          </TooltipButton>
+        </form>
       </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+    </div>
   );
 }
 

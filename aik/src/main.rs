@@ -44,7 +44,7 @@ enum Commands {
 }
 
 impl Commands {
-    async fn execute(self, globals: &Globals) -> color_eyre::Result<()> {
+    async fn execute(self, globals: &Globals) -> anyhow::Result<()> {
         use Commands::*;
         match self {
             Tokenize { files, count } => {
@@ -104,6 +104,7 @@ async fn main() {
         }
         Some(command) => {
             if let Err(e) = command.execute(&cli.globals).await {
+
                 error!("{:#}", e);
                 exit(1);
             } else {

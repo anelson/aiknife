@@ -1,0 +1,481 @@
+# See docs: https://embarkstudios.github.io/cargo-deny/checks/index.html
+# Some inspiration is drawn from: https://github.com/hyperium/tonic/blob/master/deny.toml
+
+[advisories]
+ignore = [
+  # `time` crate depends on `stdweb` crate. We need to wait for
+  # when `time` crate will be updated
+  #
+  # Original error message:
+  # The author of the `stdweb` crate is unresponsive.
+  "RUSTSEC-2020-0056",
+
+  # `viy` crate depends on `mft` 0.5.3 which depends on `simplelog` 0.7.6
+  # which depends on `term` 0.6.1 which in unmaintained.
+  #
+  # Original error message:
+  # The author of the `term` crate does not have time to maintain it and is looking
+  # for a new maintainer.
+  #
+  # Some maintained alternatives you can potentially switch to instead, depending
+  # on your needs:
+  #
+  #   - [`crossterm`](https://github.com/crossterm-rs/crossterm)
+  #   - [`termcolor`](https://crates.io/crates/termcolor)
+  #   - [`yansi`](https://crates.io/crates/yansi)
+  "RUSTSEC-2018-0015",
+
+  # The same potential segfault in time crate.
+  # Original error message:
+  #      Unix-like operating systems may segfault due to dereferencing a dangling pointer in specific circumstances. This requires an environment variable to be set in a different thread than the affected functions. This may occur without the user's knowledge, notably in a third-party library.
+  #      The affected functions from time 0.2.7 through 0.2.22 are:
+  #
+  #      - `time::UtcOffset::local_offset_at`
+  #      - `time::UtcOffset::try_local_offset_at`
+  #      - `time::UtcOffset::current_local_offset`
+  #      - `time::UtcOffset::try_current_local_offset`
+  #      - `time::OffsetDateTime::now_local`
+  #      - `time::OffsetDateTime::try_now_local`
+  #
+  #      The affected functions in time 0.1 (all versions) are:
+  #
+  #      - `at`
+  #      - `at_utc`
+  #
+  #      Non-Unix targets (including Windows and wasm) are unaffected.
+  #
+  #      ### Patches
+  #
+  #      Pending a proper fix, the internal method that determines the local offset has been modified to always return `None` on the affected operating systems. This has the effect of returning an `Err` on the `try_*` methods and `UTC` on the non-`try_*` methods.
+  #
+  #      Users and library authors with time in their dependency tree should perform `cargo update`, which will pull in the updated, unaffected code.
+  #
+  #      Users of time 0.1 do not have a patch and should upgrade to an unaffected version: time 0.2.23 or greater or the 0.3. series.
+  #
+  #      ### Workarounds
+  #
+  #      No workarounds are known.
+  #
+  #      ### References
+  #
+  #      time-rs/time#293
+  "RUSTSEC-2020-0071",
+
+  # Unmaintained crate
+  # Original error message:
+  #      The `serde_cbor` crate is unmaintained. The author has archived the github repository.
+  #      Alternatives proposed by the author:
+  #
+  #       * [`ciborium`](https://crates.io/crates/ciborium)
+  #       * [`minicbor`](https://crates.io/crates/minicbor)
+  #    = Announcement: https://github.com/pyfisch/cbor
+  #    = Solution: No safe upgrade is available!
+  "RUSTSEC-2021-0127",
+
+  # Original error message:
+  #     = Lru crate has use after free vulnerability.
+  #
+  #       Lru crate has two functions for getting an iterator. Both iterators give
+  #       references to key and value. Calling specific functions, like pop(), will remove
+  #       and free the value, and but it's still possible to access the reference of value
+  #       which is already dropped causing use after free.
+  #     = Announcement: https://github.com/jeromefroe/lru-rs/issues/120
+  #     = Solution: Upgrade to >=0.7.1
+  #     = lru v0.4.3
+  #       └── mft v0.5.3
+  #           └── viy v8.0.1
+  "RUSTSEC-2021-0130",
+
+  # Original error message:
+  # The `parse_duration::parse` function allows for parsing duration strings with exponents like `5e5s`
+  # where under the hood, the [`BigInt` type along with the `pow` function are used for such payloads](https://github.com/zeta12ti/parse_duration/blob/26940ab5cd4e3a9d6bd97aa101f8d4bbfd18ee8c/src/parse.rs#L335).
+  # Passing an arbitrarily big exponent makes the `parse_duration::parse` function to process the payload for a very long time taking up CPU and memory.
+  #
+  #      This allows an attacker to cause a DoS if the `parse_duration::parse` function is used to process untrusted input.
+  #    = Announcement: https://github.com/zeta12ti/parse_duration/issues/21
+  #    = Solution: No safe upgrade is available!
+  "RUSTSEC-2021-0041",
+
+  # Original error message:
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2022-0040
+  # `OwningRef::map_with_owner` is [unsound](https://github.com/Kimundi/owning-ref-rs/issues/77) and may result in a use-after-free.
+  # `OwningRef::map` is [unsound](https://github.com/Kimundi/owning-ref-rs/issues/71) and may result in a use-after-free.
+  # `OwningRefMut::as_owner` and `OwningRefMut::as_owner_mut` are [unsound](https://github.com/Kimundi/owning-ref-rs/issues/61) and may result in a use-after-free.
+  # The crate [violates Rust's aliasing rules](https://github.com/Kimundi/owning-ref-rs/issues/49), which may cause miscompilations on recent compilers that emit the LLVM `noalias` attribute.
+  # No patched versions are available at this time. While a pull request with some fixes is outstanding, the maintainer appears to be unresponsive.
+  # Announcement: https://github.com/noamtashma/owning-ref-unsoundness
+  # Solution: No safe upgrade is available!
+  "RUSTSEC-2022-0040",
+
+  # Original error message:
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2020-0163
+  # The [`term_size`](https://crates.io/crates/term_size) crate is no longer maintained. Consider using
+  # [`terminal_size`](https://crates.io/crates/terminal_size) instead.
+  # Announcement: https://github.com/clap-rs/term_size-rs/pull/31
+  # Solution: No safe upgrade is available!
+  "RUSTSEC-2020-0163",
+
+  # Original error message:
+  # ID: RUSTSEC-2022-0048
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2022-0048
+  # xml-rs is a XML parser has open issues around parsing including integer
+  # overflows / panics that may or may not be an issue with untrusted data.
+  # Together with these open issues with Unmaintained status xml-rs
+  # may or may not be suited to parse untrusted data.
+  # Alternatives
+  # [quick-xml](https://crates.io/crates/quick-xml)
+  # Announcement: https://github.com/netvl/xml-rs/issues
+  # Solution: No safe upgrade is available!
+  "RUSTSEC-2022-0048",
+
+  # Original error message:
+  # ID: RUSTSEC-2021-0139
+  # Advisory: https://rustsec.org/advisories/RUSTSEC-2021-0139
+  # The maintainer has advised this crate is deprecated and will not
+  # receive any maintenance.
+  # The crate does not seem to have much dependencies and may or may not be ok to use as-is.
+  # Last release seems to have been three years ago.
+  # ## Possible Alternative(s)
+  #  The below list has not been vetted in any way and may or may not contain alternatives;
+  #  - [anstyle](https://github.com/epage/anstyle)
+  #  - [nu-ansi-term](https://crates.io/crates/nu-ansi-term)
+  #  - [yansi](https://crates.io/crates/yansi)
+  # Announcement: https://github.com/ogham/rust-ansi-term/issues/72
+  # Solution: No safe upgrade is available!
+  "RUSTSEC-2021-0139",
+
+  # = Advisory: https://rustsec.org/advisories/RUSTSEC-2021-0145
+  # = On windows, `atty` dereferences a potentially unaligned pointer.
+  #
+  #   In practice however, the pointer won't be unaligned unless a custom global allocator is used.
+  #
+  #   In particular, the `System` allocator on windows uses `HeapAlloc`, which guarantees a large enough alignment.
+  #
+  #   # atty is Unmaintained
+  #
+  #   A Pull Request with a fix has been provided over a year ago but the maintainer seems to be unreachable.
+  #
+  #   Last release of `atty` was almost 3 years ago.
+  #
+  #   ## Possible Alternative(s)
+  #
+  #   The below list has not been vetted in any way and may or may not contain alternatives;
+  #
+  #    - [is-terminal](https://crates.io/crates/is-terminal)
+  #    - std::io::IsTerminal *nightly-only experimental*
+  # = Announcement: https://github.com/softprops/atty/issues/50
+  # = Solution: No safe upgrade is available!
+  "RUSTSEC-2021-0145",
+
+  # We'll need to gradually adopt the official AWS SDK
+  #
+  # Original error message:
+  # = Advisory: https://rustsec.org/advisories/RUSTSEC-2022-0071
+  # = The maintainers of Rusoto advise that all its crates are deprecated. This includes the common crates `rusoto_core`, `rusoto_signature`, `rusoto_credential`, and service crates such as `rusoto_s3` and `rusoto_ec2`.
+  #
+  #   Users should migrate to the [AWS SDK for Rust](https://github.com/awslabs/aws-sdk-rust), which is maintained by AWS.
+  # = Announcement: https://github.com/rusoto/rusoto/issues/1651
+  # = Solution: No safe upgrade is available!
+  "RUSTSEC-2022-0071",
+]
+unmaintained = "deny"
+unsound = "deny"
+vulnerability = "deny"
+yanked = "deny"
+
+# The lint level for crates with security notices. Note that as of
+# 2019-12-17 there are no security notice advisories in
+# https://github.com/rustsec/advisory-db
+notice = "deny"
+
+# severity-threshold = "None" | "Low" | "Medium" | "High" | "Critical"
+
+[bans]
+# This lint issues false-positives for `{ path = "foo/bar" }` dependencies
+# FIXME: make it "deny" once this bug is fixed:
+# https://github.com/EmbarkStudios/cargo-deny/issues/241
+wildcards = "allow"
+
+multiple-versions = "deny"
+# FIXME: deduplicate dependencies
+skip = [
+  # { name = "crate_name_here", version = "=0.11.0" },
+
+  # Older version is pulled via `prost-build`
+  { name = "heck", version = "=0.3.3" },
+
+  # Old version pulled in by older dependencies of block-utils and tiberius.
+  # hopefully when those are upgraded this is no longer needed.
+  { name = "md5", version = "=0.6.1" },
+
+  # Old version is pulled by tiberius
+  { name = "async-stream-impl", version = "=0.2.1" },
+
+  # Old version is pulled by tiberius
+  { name = "async-stream", version = "=0.2.1" },
+
+  # Old version is pulled by snafu v0.6.10
+  { name = "pin-project", version = "0.4.*" },
+
+  # Old version is pulled by pin-project
+  { name = "pin-project-internal", version = "0.4.*" },
+
+  # reqwest starting in 0.10.9 uses the new 0.7 version of serde_urlencoded.  actix still has a transitive dependency
+  # on the old 0.6 line.  We want the updates in reqwest 0.10.9+ badly enough to tolerate this
+  { name = "serde_urlencoded", version = "0.6.*" },
+
+  # bindgen 0.55 uses this older version of which
+  { name = "which", version = "3.1.*" },
+
+  # bindgen 0.55 and rusoto 0.46 use this older shlex version
+  { name = "shlex", version = "0.1.*" },
+
+  # 6.x is the new version of nom, but the only thing that has been updated yet to use it is hdrhistogram.
+  # everything else, including block-utils, config, and a transitive dependency of bindgen 0.55 use the older 5.0
+  { name = "nom", version = "5.1.*" },
+
+  # elastio v0.23.7 -> serde_with v1.14.0 -> serde_with_macros v1.5.2 -> darling v0.13.4
+  # iscan v0.1-82 -> serde_with v2.1.0 -> serde_with_macros v2.1.0 -> darling v0.14.2
+  { name = "darling", version = "=0.13.4" },
+  { name = "darling_core", version = "=0.13.4" },
+  { name = "darling_macro", version = "=0.13.4" },
+  { name = "serde_with", version = "=1.14.0" },
+  { name = "serde_with_macros", version = "=1.5.2" },
+
+  # `config` and `nom` crates use the old version of this crate
+  { name = "arrayvec", version = "0.5.2" },
+
+  # `block-utils` v0.10.4 uses newer version than elastio crates
+  # remove this when `strum` version is bumped everywhere else
+  { name = "strum", version = "0.21.*" },
+  { name = "strum_macros", version = "0.21.*" },
+
+  # older versions of these crates are pulled in through `sentry`
+  { name = "rustc_version", version = "=0.3.3" },
+
+  # older version is pulled in through `rusoto` and `stdweb`
+  { name = "rustc_version", version = "=0.2.3" },
+  # older version is pulled in through older `rustc_version`
+  { name = "semver", version = "=0.9.0" },
+  { name = "semver-parser", version = "=0.7.0" },
+
+  # older version is pulled through `handlebars`
+  { name = "opaque-debug", version = "=0.2.3" },
+
+  # older version is pulled through `handlebars`
+  { name = "generic-array", version = "=0.12.4" },
+
+  # older version is pulled through `handlebars`
+  { name = "digest", version = "=0.8.1" },
+  # older version is pulled through `rsa`, `rusoto_signature`, `sha2`
+  { name = "digest", version = "=0.9.0" },
+
+  { name = "block-buffer", version = "=0.7.3" }, # pulled through `handlebars`
+  { name = "block-buffer", version = "=0.9.0" }, # pulled through `sha2`
+
+  # older version is pulled through `gherkin-rust`
+  { name = "typed-builder", version = "=0.7.1" },
+
+  # older version is pulled through `find-winsdk` - compile-time in elastio-cli build
+  { name = "winreg", version = "=0.5.1" },
+
+  { name = "webpki", version = "0.21" },
+  { name = "sct", version = "0.6.1" },
+  { name = "rustls", version = "0.19" },
+
+  # Almost every transitive dep is still on 0.2, only simple_logger is on 0.3
+  { name = "time", version = "0.2.*" },
+  { name = "time-macros", version = "0.1.*" },
+
+  # fomka v0.1.0 -> blkid v1.0.0 -> (build) blkid-sys v0.1.6 -> bindgen v0.58.1 -> env_logger v0.8.4
+  { name = "bindgen", version = "=0.58.1" },
+  { name = "cexpr", version = "=0.4.0" },
+  { name = "env_logger", version = "=0.8.4" },
+
+  # older version is pulled through `domovoi`
+  { name = "sha2", version = "=0.9.9" },
+
+  # `rowan` depends on newer version, but all other world still uses `0.11`
+  { name = "hashbrown", version = "=0.11.2" },
+
+  # 1.17.0 version of tokio uses newer dependencies, while all other world
+  # depends on older versions of them
+  { name = "mio", version = "=0.7.14" },
+  { name = "parking_lot", version = "=0.11.2" },
+  { name = "parking_lot_core", version = "=0.8.5" },
+
+  # bollard (dep of docker-sdk) still uses tokio-util 0.6.9, as does domovoi and scalez-stor-client
+  { name = "tokio-util", version = "0.6.*" },
+
+  # pretty much everything except countme and rowan are using the older dashmap
+  { name = "dashmap", version = "4.*" },
+
+  # Some cucumber dependencies uses lower versions of some crates than cucumber itself
+  { name = "sealed", version = "=0.3.0" },
+  { name = "textwrap", version = "=0.12.1" },
+
+  { name = "hmac", version = "0.10.1" },
+
+  # dependency of `cucumber`, duplicates name of `red-stack/inventory` crate
+  { name = "inventory", version = "=0.2.2" },
+
+  # Scalez uses newer version
+  { name = "more-asserts", version = "0.3.*" },
+
+  { name = "ntapi", version = "=0.3.6" },
+
+  # `uuid` published v1 major version, a lot of crates in the ecosystem
+  # still use the 0.x though
+  { name = "uuid", version = "=0.8.2" },
+
+  # The following two crates are used by `tonic v0.6.2` which in its turn is used
+  # by a number of Elastio crates.
+  { name = "rustls-native-certs", version = "=0.5.0" },
+
+  { name = "tokio-rustls", version = "=0.22.0" },
+
+  # `iscan` uses published version of `elastio-vergen` --- v0.22.26;
+  # other crates use local version --- v*-dev.
+  { name = "elastio-vergen", version = "=0.22.26" },
+
+  # `parse_duration` uses old `num`.
+  # `num` lifts `num-bigint`, `num-complex`, `num-rational` of older versions.
+  { name = "num", version = "=0.2.1" },
+
+  { name = "windows-sys", version = "=0.36.1" },
+  { name = "windows_aarch64_msvc", version = "=0.36.1" },
+  { name = "windows_i686_gnu", version = "=0.36.1" },
+  { name = "windows_i686_msvc", version = "=0.36.1" },
+  { name = "windows_x86_64_gnu", version = "=0.36.1" },
+  { name = "windows_x86_64_msvc", version = "=0.36.1" },
+
+  # Older version is used by `scalez-stor-client` which doesn't belong to `elastio` repository.
+  { name = "lru", version = "=0.7.2" },
+]
+
+# Skips the entire tree of the crate dependencies:
+skip-tree = [
+  # `viy` crate depends on this crate which has a lot of outdated dependencies. There no alternatives
+  # so we have to ignore it
+  # FIXME: Remove it after https://github.com/elastio/elastio/issues/2420
+  { name = "mft", version = "0.5.*", depth = 5 },
+
+  # `parse_duration` uses old `num`.
+  # `num` lifts `num-bigint`, `num-complex`, `num-rational` of older versions.
+  { name = "num", version = "0.2.1" },
+
+  # Newer versions is used only in `ra_stdx`
+  { name = "miow", version = "=0.4.0", depth = 3 },
+
+  # { name = "crate_name_here", version = "=0.11.0", depth = 20 },
+]
+
+deny = [
+  # color-backtrace is nice but brings in too many dependencies and that are often outdated, so not worth it for us.
+  { name = "color-backtrace" },
+
+  # deprecated
+  { name = "quickersort" },
+
+  # `strum_macros` direct usage is deprecated. Use `strum = { features = ["derive"] }` instead.
+  # We specify `strum` itself as the wrapper crate, because it obviously reexports proc macros,
+  # but also some other crate still reference `strum_macros` due to legacy reasons...
+  { name = "strum_macros", wrappers = ["strum", "comfy-table", "blkid"] },
+]
+
+[sources]
+allow-git = [
+  "https://github.com/softprops/dynomite",
+  # TODO: remove this when a new version of crate will be released
+  "https://github.com/Silverhorn27/blkid",
+  # TODO: Make a PR to the upstream and switch to the normal dependency.
+  "https://github.com/vsazhenyuk-softheme/libaio-futures",
+  # TODO: Use public crate when maintainer will accept PR:
+  # https://github.com/magiclen/path-absolutize/pull/10
+  "https://github.com/elastio/path-absolutize",
+  "https://github.com/elastio/rusoto",
+]
+allow-registry = [
+  "https://github.com/rust-lang/crates.io-index",
+  "https://dl.cloudsmith.io/basic/elastio/private/cargo/index.git",
+]
+unknown-git = "deny"
+unknown-registry = "warn"
+
+[licenses]
+copyleft   = "deny"
+private    = { ignore = true }
+unlicensed = "deny"
+
+# run `cargo deny list` to see which crates use which license
+allow = [
+  "MIT",
+  "BSD-3-Clause",
+  "BSD-2-Clause",
+  "0BSD",
+  "Unlicense",
+  "Apache-2.0",
+  "CC0-1.0",
+  "Zlib",
+  "ISC",
+  "OpenSSL",
+  # (c) @anelson:
+  # I'm okay with it (MPL-2.0 license) because of this:
+  #
+  # > However, a larger work using the licensed work may be distributed under
+  # > different terms and without source code for files added in the larger work.
+  #
+  # So if we modify this crate's code, we must release that code, which is why
+  # it's "copyleft".
+  # But that copyleft license doesn't contaminate the rest of the code that
+  # just links with the MPL code. So we can add MPL 2 to the approved license list
+  "MPL-2.0",
+
+  # Property of `elastio` is free to use within `elastio` itself =)
+  "LicenseRef-Elastio-Proprietary",
+  "BlueOak-1.0.0",
+  "Unicode-DFS-2016",
+]
+allow-osi-fsf-free = "neither"
+default = "deny"
+deny = []
+
+# We want really high confidence when inferring licenses from text
+confidence-threshold = 0.92
+
+[[licenses.clarify]]
+name    = "stream-vbyte"
+version = "0.3.2"
+# This is in fact `Copyfree Open Innovation License` but it seems there is no SPDX expression for it
+# https://bitbucket.org/marshallpierce/stream-vbyte-rust/src/master/LICENSE.txt
+expression = "Unlicense"
+license-files = [
+  # license file hash was taken from the error message
+  { path = "LICENSE.txt", hash = 0x508d93ea },
+]
+
+[[licenses.clarify]]
+# This crate has a low-confidence license inference score (0.85), so clarifying manually...
+# This PR should fix low-confidence score: https://github.com/briansmith/webpki/pull/128
+# The maintainer just needs some time to pay attention to it
+expression    = "ISC"
+license-files = [{ path = "LICENSE", hash = 0x001c7e6c }]
+name          = "webpki"
+[[licenses.clarify]]
+name    = "ring"
+version = "0.16.15"
+# Copied this expression from the comment of Jake-Shadle (maintainer of cargo-deny)
+# https://github.com/EmbarkStudios/cargo-deny/issues/110#issuecomment-576173641
+# The issue under ring repo:
+# https://github.com/briansmith/ring/issues/902
+expression    = "ISC AND MIT AND OpenSSL"
+license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
+
+# The encoding-rs crate is licensed under MIT or Apache but it uses a custom license file due to a
+# crates.io limitation.  This license clarification was copy-pasted directly from the GitHub README
+# for the project:
+[[licenses.clarify]]
+expression    = "(Apache-2.0 OR MIT) AND BSD-3-Clause"
+license-files = [{ path = "COPYRIGHT", hash = 0x39f8ad31 }]
+name          = "encoding_rs"
+version       = "*"

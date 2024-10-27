@@ -1,8 +1,12 @@
 This is a Rust workspace for a project that has both a CLI (`aik`) and a UI (`aiknife-ui`).  
 
-The UI is a Tauri application which uses React for the front-end.  
+The UI is a Tauri application which uses React for the front-end.  It uses Tauri 2.0, which is no longer in Alpha and has been released.  We use version 2.0.0.
 
-`aiknife-ui/src` contains the React code, while `aiknife-ui/src-tauri` contains the Rust code.
+All new dependencies should be added to the workspace in the `Cargo.toml` file at the root of the workspace, and referenced with `{ workspace = true }` in the crate-specific `Cargo.toml` where the dependency is used.
+
+`aiknife-ui/src` contains the React code, while `aiknife-ui/src-tauri` contains the Rust code.  Any code changes that pertain to React, Tailwind, styles, Typescript, etc, must be made to the appropriate subdirectory in `aiknife-ui`.  Absolutely nothing related to these elements should be in the root directory!
+
+Styles should use the Tailwind design system and be placed in `aiknife-ui/src/App.css`.  The main `tailwind.config.js` file is in `aiknife-ui` directory.
 
 For the React part of the code, only Typescript is used and types should always be included.
 

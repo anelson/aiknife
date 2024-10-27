@@ -1,0 +1,24 @@
+# See documentation for this config file at https://github.com/crate-ci/typos/blob/master/docs/reference.md
+
+[default.extend-identifiers]
+# Crate name
+mke2fs = "mke2fs"
+
+[files]
+extend-exclude = [
+  # We don't want `typos` to process the git submodules
+  "cli/yozhik-linux/libelastio-snap-sys/elastio-snap",
+  "cli/eio-driver/drivers",
+
+  # Exclude generated files that are checked in to source control
+  "package-lock.json",
+  "Cargo.lock",
+  ".github/workflows",
+  ".xtask",
+
+  # Specific files that contain false positives. Unfortunately
+  # we have to ignore the entire file because we can't granularly
+  # ignore a specific false positive in a specific file.
+  "cli/elastio-cli/build.rs",
+  "Makefile",
+]
