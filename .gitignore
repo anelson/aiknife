@@ -1,2 +1,5 @@
 # Ignore Rust compiler artifacts
 target/
+aiknife-ui/src-tauri/icons/icon.afphoto~lock~
+.DS_Store
+
