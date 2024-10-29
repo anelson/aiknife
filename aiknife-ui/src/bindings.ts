@@ -8,7 +8,7 @@ export const commands = {
 async newSession() : Promise<SessionHandle> {
     return await TAURI_INVOKE("new_session");
 },
-async sendMessage(session: SessionHandle, message: string) : Promise<string> {
+async sendMessage(session: SessionHandle, message: string) : Promise<MessagePair> {
     return await TAURI_INVOKE("send_message", { session, message });
 },
 async checkApiKey() : Promise<null> {
@@ -26,6 +26,9 @@ async checkApiKey() : Promise<null> {
 
 /** user-defined types **/
 
+export type ChatMessage = { id: string; role: string; content: string; status: MessageStatus }
+export type MessagePair = { user_message: ChatMessage; assistant_message: ChatMessage }
+export type MessageStatus = "Pending" | "Complete"
 export type SessionHandle = { id: string }
 
 /** tauri-specta globals **/

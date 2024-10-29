@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { commands, Message, SessionHandle } from "./bindings";
+import { commands, SessionHandle } from "./bindings";
 import "./App.css";
+import type { ChatMessage } from "./bindings";
 
 interface TooltipButtonProps {
   disabled: boolean;
   tooltip: string;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
 }
 
@@ -20,12 +20,12 @@ const TooltipButton: React.FC<TooltipButtonProps> = ({
     <button type="submit" disabled={disabled} onClick={onClick}>
       {children}
     </button>
-    {disabled && <span className="tooltip">{tooltip}</span>}
+    {disabled && tooltip && <span className="tooltip">{tooltip}</span>}
   </div>
 );
 
 function App() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionHandle | null>(null);
@@ -58,17 +58,12 @@ function App() {
     e.preventDefault();
     if (!input.trim() || apiKeyError || !session) return;
 
-    const userMessage: Message = { role: "user", content: input };
-    setMessages((prevMessages) => [...prevMessages, userMessage]);
+    const userInput = input.trim();
     setInput("");
 
     try {
-      const response = await commands.sendMessage(session, input);
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: response,
-      };
-      setMessages((prevMessages) => [...prevMessages, assistantMessage]);
+      const response = await commands.sendMessage(session, userInput);
+      setMessages(prevMessages => [...prevMessages, response.user_message, response.assistant_message]);
     } catch (error) {
       console.error("Error:", error);
       setApiKeyError(error as string);
@@ -85,8 +80,8 @@ function App() {
       <div className="app-content">
         <h1>Simple ChatGPT Clone</h1>
         <div className="chat-container">
-          {messages.map((message, index) => (
-            <div key={index} className={`message ${message.role}`}>
+          {messages.map((message) => (
+            <div key={message.id} className={`message ${message.role}`}>
               {message.content}
             </div>
           ))}
@@ -100,11 +95,17 @@ function App() {
             disabled={!!apiKeyError || !session}
           />
           <TooltipButton
-            disabled={!!apiKeyError || !session}
-            tooltip={apiKeyError || (!session ? "Creating session..." : "")}
-            onClick={handleSubmit}
+            disabled={!!apiKeyError || !session || !input.trim()}
+            tooltip={
+              apiKeyError || 
+              (!session ? "Creating session..." : "")
+            }
+            onClick={(e) => {
+              e.preventDefault();
+              handleSubmit(e);
+            }}
           >
-            {apiKeyError ? "⚠️" : "Send"}
+            Send
           </TooltipButton>
         </form>
       </div>

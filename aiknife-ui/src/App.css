@@ -2,24 +2,118 @@
 @import 'tailwindcss/components';
 @import 'tailwindcss/utilities';
 
-/* Custom styles */
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
+.App {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  padding: 2rem;
 }
 
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
+h1 {
+  text-align: center;
+  margin-bottom: 2rem;
+  font-size: 2rem;
 }
 
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
+.chat-container {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 2rem;
+  padding: 1rem;
 }
 
-/* You can keep any other custom styles you need here */
+.message {
+  margin: 1rem 0;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  max-width: 80%;
+}
+
+.message.user {
+  background-color: #2b2b2b;
+  margin-left: auto;
+}
+
+.message.assistant {
+  background-color: #363636;
+  margin-right: auto;
+}
+
+form {
+  display: flex;
+  gap: 1rem;
+  outline: none;
+}
+
+form:focus, form:active {
+  outline: none;
+}
+
+input {
+  flex: 1;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background-color: #2b2b2b;
+  color: white;
+  border: none;
+}
+
+input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+}
+
+button {
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  background-color: #0ea5e9;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background-color: #0284c7;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.error-banner {
+  background-color: #dc2626;
+  color: white;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  border-radius: 0.5rem;
+}
+
+.tooltip-container {
+  position: relative;
+}
+
+.tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #374151;
+  color: white;
+  padding: 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  margin-bottom: 0.5rem;
+}

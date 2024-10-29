@@ -13,8 +13,28 @@ struct AppState {
 }
 
 #[derive(Serialize, Deserialize, specta::Type)]
+pub enum MessageStatus {
+    Pending,
+    Complete,
+}
+
+#[derive(Serialize, Deserialize, specta::Type)]
+pub struct ChatMessage {
+    id: uuid::Uuid,
+    role: String,
+    content: String,
+    status: MessageStatus,
+}
+
+#[derive(Serialize, Deserialize, specta::Type)]
 pub struct SessionHandle {
     id: uuid::Uuid,
+}
+
+#[derive(Serialize, Deserialize, specta::Type)]
+pub struct MessagePair {
+    user_message: ChatMessage,
+    assistant_message: ChatMessage,
 }
 
 #[tauri::command]
@@ -33,15 +53,38 @@ async fn send_message(
     state: tauri::State<'_, AppState>,
     session: SessionHandle,
     message: String,
-) -> Result<String, String> {
+) -> Result<MessagePair, String> {
     let session = state
         .session_manager
         .get_session(session.id)
         .map_err(|e| e.to_string())?;
-    session
+
+    // Create user message
+    let user_message = ChatMessage {
+        id: uuid::Uuid::now_v7(),
+        role: "user".to_string(),
+        content: message.clone(),
+        status: MessageStatus::Complete,
+    };
+
+    // Get response from AI
+    let response = session
         .chat_completion(chat::Message::new_user_message(message))
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Create assistant message
+    let assistant_message = ChatMessage {
+        id: uuid::Uuid::now_v7(),
+        role: "assistant".to_string(),
+        content: response,
+        status: MessageStatus::Complete,
+    };
+
+    Ok(MessagePair {
+        user_message,
+        assistant_message,
+    })
 }
 
 #[tauri::command]
