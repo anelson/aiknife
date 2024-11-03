@@ -1,7 +1,11 @@
 //! Implementation of the GPT-like chat interface backend.
+use std::sync::Arc;
+
+use crate::{Result, UiError};
 use aiknife::chat;
 use serde::{Deserialize, Serialize};
 use tauri_specta::Event;
+use tracing::*;
 
 pub mod messages {
     use super::*;
@@ -33,22 +37,25 @@ pub mod messages {
 }
 
 pub mod events {
+    use std::sync::Arc;
+
     use super::*;
     use messages::*;
 
-    #[derive(Serialize, Deserialize, Clone, specta::Type, tauri_specta::Event)]
+    #[derive(Serialize, Clone, specta::Type, tauri_specta::Event)]
     pub struct MessagePending {
         pub(crate) message: ChatMessage,
     }
-    #[derive(Serialize, Deserialize, Clone, specta::Type, tauri_specta::Event)]
+    #[derive(Serialize, Clone, specta::Type, tauri_specta::Event)]
     pub struct MessageResponse {
         pub(crate) message: ChatMessage,
     }
 
-    #[derive(Serialize, Deserialize, Clone, specta::Type, tauri_specta::Event)]
+    #[derive(Serialize, Clone, specta::Type, tauri_specta::Event)]
     pub struct MessageError {
         pub(crate) message_id: uuid::Uuid,
-        pub(crate) error: String,
+        #[specta(type = UiError)]
+        pub(crate) error: Arc<UiError>,
     }
 }
 
@@ -66,28 +73,23 @@ impl AppState {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn new_session(
-    state: tauri::State<'_, AppState>,
-) -> Result<messages::SessionHandle, String> {
-    let session = state
-        .session_manager
-        .new_session()
-        .map_err(|e| e.to_string())?;
+pub async fn new_session(state: tauri::State<'_, AppState>) -> Result<messages::SessionHandle> {
+    let session = state.session_manager.new_session()?;
     Ok(messages::SessionHandle { id: session.id() })
 }
 
 #[tauri::command]
 #[specta::specta]
+#[tracing::instrument(skip_all, err, fields(session = %session.id))]
 pub async fn send_message(
     state: tauri::State<'_, AppState>,
     window: tauri::Window,
     session: messages::SessionHandle,
     message: String,
-) -> Result<uuid::Uuid, String> {
-    let session = state
-        .session_manager
-        .get_session(session.id)
-        .map_err(|e| e.to_string())?;
+) -> Result<uuid::Uuid> {
+    debug!(%message, "Sending chat message");
+
+    let session = state.session_manager.get_session(session.id)?;
 
     // Create user message
     let message_id = uuid::Uuid::now_v7();
@@ -102,8 +104,7 @@ pub async fn send_message(
     events::MessagePending {
         message: user_message.clone(),
     }
-    .emit(&window)
-    .map_err(|e| e.to_string())?;
+    .emit(&window)?;
 
     // Spawn a task to handle the API call
     tauri::async_runtime::spawn({
@@ -133,7 +134,7 @@ pub async fn send_message(
                     // Emit error event
                     let _ = events::MessageError {
                         message_id: outgoing_message_id,
-                        error: e.to_string(),
+                        error: Arc::new(UiError::from(e)),
                     }
                     .emit(&window);
                 }
@@ -146,6 +147,8 @@ pub async fn send_message(
 
 #[tauri::command]
 #[specta::specta]
-pub fn check_api_key() -> Result<(), String> {
-    chat::check_api_key().map_err(|e| e.to_string())
+pub fn check_api_key() -> Result<()> {
+    chat::check_api_key()?;
+
+    Ok(())
 }

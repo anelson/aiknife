@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from "react";
 import { commands, events } from "./bindings";
-import type { ChatMessage, SessionHandle, Role } from "./bindings";
+import type { ChatMessage, SessionHandle, Role, UiError } from "./bindings";
 import "./App.css";
+import {
+  warn,
+  debug,
+  trace,
+  info,
+  error,
+  attachConsole,
+} from "@tauri-apps/plugin-log";
 
 interface TooltipButtonProps {
   disabled: boolean;
@@ -27,13 +35,24 @@ const TooltipButton: React.FC<TooltipButtonProps> = ({
 interface MessageState {
   messages: ChatMessage[];
   pendingMessages: Set<string>;
-  messageErrors: Record<string, string>;
+  messageErrors: Record<string, UiError>;
 }
+
+const handleError = (e: unknown) => {
+  error("Error details:" + JSON.stringify(e, null, 2));
+
+  const uiError = e as UiError;
+  return uiError.details 
+    ? `${uiError.type}: ${uiError.message}\n\nDetails:\n${uiError.details}`
+    : `${uiError.type}: ${uiError.message}`;
+};
 
 function useMessageEvents(): MessageState {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [pendingMessages, setPendingMessages] = useState<Set<string>>(new Set());
-  const [messageErrors, setMessageErrors] = useState<Record<string, string>>({});
+  const [pendingMessages, setPendingMessages] = useState<Set<string>>(
+    new Set(),
+  );
+  const [messageErrors, setMessageErrors] = useState<Record<string, UiError>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -62,44 +81,129 @@ function useMessageEvents(): MessageState {
         events.messageError.listen((event) => {
           if (!mounted) return;
           const { message_id, error } = event.payload;
-          setMessageErrors(prev => ({
+          setMessageErrors((prev) => ({
             ...prev,
-            [message_id]: error
+            [message_id]: error,
           }));
           setPendingMessages(new Set());
         }),
       ]);
-      
-      return () => unlisteners.forEach(u => u());
+
+      return () => unlisteners.forEach((u) => u());
     };
 
     const cleanup = setupListeners();
     return () => {
       mounted = false;
-      cleanup.then(cleanupFn => cleanupFn?.());
+      cleanup.then((cleanupFn) => cleanupFn?.());
     };
   }, []);
 
   return { messages, pendingMessages, messageErrors };
 }
 
+interface ErrorMessageProps {
+  error: UiError;
+}
+
+const ErrorMessage: React.FC<ErrorMessageProps> = ({ error }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const copyToClipboard = async () => {
+    try {
+      await navigator.clipboard.writeText(
+        `${error.type}: ${error.message}${error.details ? `\n\n${error.details}` : ''}`
+      );
+    } catch (err) {
+      console.error('Failed to copy error to clipboard:', err);
+    }
+  };
+
+  if (!error) return null;
+
+  return (
+    <div className="relative inline-block">
+      <span 
+        className="error-trigger text-red-500 cursor-pointer hover:opacity-80" 
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsExpanded(!isExpanded);
+        }}
+        title="Click to show error details"
+      >
+        ⚠️
+      </span>
+      {isExpanded && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-red-50 rounded-lg shadow-lg w-full max-w-4xl overflow-hidden">
+            <div className="p-6 space-y-4 text-left">
+              <div className="font-mono text-red-700 text-lg font-bold">
+                {error.type}: {error.message}
+              </div>
+
+              {error.details && (
+                <div className="font-mono text-red-900 whitespace-pre-wrap">
+                  {error.details}
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-red-200 p-4 flex justify-end gap-2">
+              <button
+                onClick={copyToClipboard}
+                className="bg-red-100 text-red-700 hover:bg-red-200 text-sm px-3 py-1 rounded flex items-center gap-1"
+                title="Copy error details to clipboard"
+              >
+                Copy
+              </button>
+              <button
+                onClick={() => setIsExpanded(false)}
+                className="bg-red-100 text-red-700 hover:bg-red-200 text-sm px-3 py-1 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 function App() {
   const { messages, pendingMessages, messageErrors } = useMessageEvents();
   const [input, setInput] = useState("");
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [chatSessionError, setChatSessionError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionHandle | null>(null);
 
   useEffect(() => {
     checkApiKey();
     createSession();
+
+    // Wire up the Tauri log output to the console for easier debugging
+    const setupLogger = async () => {
+      const detach = await attachConsole();
+      return detach;
+    };
+    const detachPromise = setupLogger();
+
+    // Cleanup when component unmounts
+    return () => {
+      detachPromise.then((detach) => detach());
+    };
   }, []);
+
+  const handleSessionError = (error: unknown) => {
+    const formattedError = handleError(error);
+    setChatSessionError(formattedError);
+  };
 
   const checkApiKey = async () => {
     try {
       await commands.checkApiKey();
-      setApiKeyError(null);
+      setChatSessionError(null);
     } catch (error) {
-      setApiKeyError(error as string);
+      handleSessionError(error);
     }
   };
 
@@ -108,14 +212,13 @@ function App() {
       const newSession = await commands.newSession();
       setSession(newSession);
     } catch (error) {
-      console.error("Error creating session:", error);
-      setApiKeyError(error as string);
+      handleSessionError(error);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || apiKeyError || !session) return;
+    if (!input.trim() || chatSessionError || !session) return;
 
     const userInput = input.trim();
     setInput("");
@@ -123,16 +226,15 @@ function App() {
     try {
       await commands.sendMessage(session, userInput);
     } catch (error) {
-      console.error("Error:", error);
-      setApiKeyError(error as string);
+      handleSessionError(error);
     }
   };
 
   return (
     <div className="App">
-      {apiKeyError && (
+      {chatSessionError && (
         <div className="error-banner">
-          <p>{apiKeyError}</p>
+          <p>{chatSessionError}</p>
         </div>
       )}
       <div className="app-content">
@@ -143,15 +245,12 @@ function App() {
               key={message.id}
               className={`message ${message.role.toLowerCase()} ${
                 pendingMessages.has(message.id) ? "pending" : ""
-              } ${messageErrors[message.id] ? "tooltip-container" : ""}`}
+              }`}
             >
-              <div className="flex items-center gap-2">
-                <span>{message.content}</span>
+              <div className="flex items-start gap-2">
+                <span className="flex-grow">{message.content}</span>
                 {messageErrors[message.id] && (
-                  <>
-                    <span className="text-red-500">⚠️</span>
-                    <span className="error-tooltip">{messageErrors[message.id]}</span>
-                  </>
+                  <ErrorMessage error={messageErrors[message.id]} />
                 )}
                 {pendingMessages.has(message.id) && (
                   <span className="pending-indicator">...</span>
@@ -166,11 +265,13 @@ function App() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Type your message..."
-            disabled={!!apiKeyError || !session}
+            disabled={!!chatSessionError || !session}
           />
           <TooltipButton
-            disabled={!!apiKeyError || !session || !input.trim()}
-            tooltip={apiKeyError || (!session ? "Creating session..." : "")}
+            disabled={!!chatSessionError || !session || !input.trim()}
+            tooltip={
+              chatSessionError || (!session ? "Creating session..." : "")
+            }
             onClick={(e) => {
               e.preventDefault();
               handleSubmit(e);

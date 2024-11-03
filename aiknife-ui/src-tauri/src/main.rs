@@ -6,5 +6,11 @@
 use aiknife_ui_lib::*;
 
 fn main() {
-    run();
+    match run() {
+        Ok(_) => {}
+        Err(e) => {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+    }
 }

@@ -11,6 +11,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2.0.0
         version: 2.0.3
+      '@tauri-apps/plugin-log':
+        specifier: ~2
+        version: 2.0.0
       '@tauri-apps/plugin-shell':
         specifier: ^2.0.0
         version: 2.0.1
@@ -34,13 +37,13 @@ importers:
         specifier: ^4.2.1
         version: 4.3.3(vite@5.4.10)
       autoprefixer:
-        specifier: ^10.4.20
+        specifier: ^10.4.14
         version: 10.4.20(postcss@8.4.47)
       postcss:
-        specifier: ^8.4.47
+        specifier: ^8.4.23
         version: 8.4.47
       tailwindcss:
-        specifier: ^3.4.14
+        specifier: ^3.3.0
         version: 3.4.14
       typescript:
         specifier: ^5.2.2
@@ -469,6 +472,9 @@ packages:
     resolution: {integrity: sha512-Hl9eFXz+O366+6su9PfaSzu2EJdFe1p8K8ghkWmi40dz8VmSE7vsMTaOStD0I71ckSOkh2ICDX7FQTBgjlpjWw==}
     engines: {node: '>= 10'}
     hasBin: true
+
+  '@tauri-apps/plugin-log@2.0.0':
+    resolution: {integrity: sha512-C+NII9vzswqnOQE8k7oRtnaw0z5TZsMmnirRhXkCKDEhQQH9841Us/PC1WHtGiAaJ8za1A1JB2xXndEq/47X/w==}
 
   '@tauri-apps/plugin-shell@2.0.1':
     resolution: {integrity: sha512-akU1b77sw3qHiynrK0s930y8zKmcdrSD60htjH+mFZqv5WaakZA/XxHR3/sF1nNv9Mgmt/Shls37HwnOr00aSw==}
@@ -1394,6 +1400,10 @@ snapshots:
       '@tauri-apps/cli-win32-arm64-msvc': 2.0.4
       '@tauri-apps/cli-win32-ia32-msvc': 2.0.4
       '@tauri-apps/cli-win32-x64-msvc': 2.0.4
+
+  '@tauri-apps/plugin-log@2.0.0':
+    dependencies:
+      '@tauri-apps/api': 2.0.3
 
   '@tauri-apps/plugin-shell@2.0.1':
     dependencies:

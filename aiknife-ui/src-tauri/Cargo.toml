@@ -27,3 +27,13 @@ specta-typescript = { workspace = true }
 tauri = { workspace = true }
 tauri-plugin-shell = { workspace = true }
 tauri-specta = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tauri-plugin-log = "2"
+log = { workspace = true } # used only for the `LogLevel` enum
+tracing = { workspace = true, features = ["log", "log-always"] } # forward all events to `log` crate
+tracing-subscriber.workspace = true
+strum.workspace = true
+
+[dev-dependencies]
+expect-test.workspace = true

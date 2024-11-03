@@ -36,12 +36,29 @@ messageResponse: "message-response"
 /** user-defined types **/
 
 export type ChatMessage = { id: string; role: Role; content: string; status: MessageStatus }
-export type MessageError = { message_id: string; error: string }
+export type MessageError = { message_id: string; error: UiError }
 export type MessagePending = { message: ChatMessage }
 export type MessageResponse = { message: ChatMessage }
 export type MessageStatus = "Pending" | "Complete"
 export type Role = "user" | "assistant"
 export type SessionHandle = { id: string }
+/**
+ * Fake struct that matches the shape of the JSON serialized form of [`UiError`].
+ * 
+ * Used to generate the `specta::Type` implementation that describes what UiError actually looks
+ * like when serialized.  The `specta` crate is definitely *not* intended for hand-rolled impls of
+ * `Type`, so this is just cleaner and simpler
+ */
+export type UiError = { type: UiErrorType; message: string; details: string | null }
+/**
+ * Auto-generated discriminant enum variants
+ */
+export type UiErrorType = "Application" | 
+/**
+ * A tauri::Error, but wrapped in anyhow::Error because we need that representation to
+ * serialize
+ */
+"Tauri" | "AnotherError"
 
 /** tauri-specta globals **/
 
