@@ -8,7 +8,7 @@ export const commands = {
 async newSession() : Promise<SessionHandle> {
     return await TAURI_INVOKE("new_session");
 },
-async sendMessage(session: SessionHandle, message: string) : Promise<MessagePair> {
+async sendMessage(session: SessionHandle, message: string) : Promise<string> {
     return await TAURI_INVOKE("send_message", { session, message });
 },
 async checkApiKey() : Promise<null> {
@@ -19,6 +19,15 @@ async checkApiKey() : Promise<null> {
 /** user-defined events **/
 
 
+export const events = __makeEvents__<{
+messageError: MessageError,
+messagePending: MessagePending,
+messageResponse: MessageResponse
+}>({
+messageError: "message-error",
+messagePending: "message-pending",
+messageResponse: "message-response"
+})
 
 /** user-defined constants **/
 
@@ -27,7 +36,9 @@ async checkApiKey() : Promise<null> {
 /** user-defined types **/
 
 export type ChatMessage = { id: string; role: string; content: string; status: MessageStatus }
-export type MessagePair = { user_message: ChatMessage; assistant_message: ChatMessage }
+export type MessageError = { message_id: string; error: string }
+export type MessagePending = { message: ChatMessage }
+export type MessageResponse = { message: ChatMessage }
 export type MessageStatus = "Pending" | "Complete"
 export type SessionHandle = { id: string }
 

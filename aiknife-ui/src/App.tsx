@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { commands, SessionHandle } from "./bindings";
+import { commands, events } from "./bindings";
+import type { ChatMessage, SessionHandle } from "./bindings";
 import "./App.css";
-import type { ChatMessage } from "./bindings";
 
 interface TooltipButtonProps {
   disabled: boolean;
@@ -29,10 +29,43 @@ function App() {
   const [input, setInput] = useState("");
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionHandle | null>(null);
+  const [pendingMessages, setPendingMessages] = useState<Set<string>>(
+    new Set(),
+  );
 
   useEffect(() => {
     checkApiKey();
     createSession();
+
+    const unlisten = Promise.all([
+      events.messagePending.listen((event) => {
+        const message: ChatMessage = event.payload.message;
+        setMessages((prev) => [...prev, message]);
+        setPendingMessages((prev) => new Set(prev).add(message.id));
+      }),
+
+      events.messageResponse.listen((event) => {
+        const message: ChatMessage = event.payload.message;
+        setMessages((prev) => [...prev, message]);
+        setPendingMessages((prev) => {
+          const newSet = new Set(prev);
+          const lastPending = Array.from(newSet).pop();
+          if (lastPending) newSet.delete(lastPending);
+          return newSet;
+        });
+      }),
+
+      events.messageError.listen((event) => {
+        const message_id = event.payload.message_id;
+        const error = event.payload.error;
+        setApiKeyError(error);
+        setPendingMessages(new Set());
+      }),
+    ]);
+
+    return () => {
+      unlisten.then((unlisteners) => unlisteners.forEach((u) => u()));
+    };
   }, []);
 
   const checkApiKey = async () => {
@@ -62,8 +95,7 @@ function App() {
     setInput("");
 
     try {
-      const response = await commands.sendMessage(session, userInput);
-      setMessages(prevMessages => [...prevMessages, response.user_message, response.assistant_message]);
+      await commands.sendMessage(session, userInput);
     } catch (error) {
       console.error("Error:", error);
       setApiKeyError(error as string);
@@ -81,8 +113,14 @@ function App() {
         <h1>Simple ChatGPT Clone</h1>
         <div className="chat-container">
           {messages.map((message) => (
-            <div key={message.id} className={`message ${message.role}`}>
+            <div
+              key={message.id}
+              className={`message ${message.role} ${pendingMessages.has(message.id) ? "pending" : ""}`}
+            >
               {message.content}
+              {pendingMessages.has(message.id) && (
+                <span className="pending-indicator">...</span>
+              )}
             </div>
           ))}
         </div>
@@ -96,10 +134,7 @@ function App() {
           />
           <TooltipButton
             disabled={!!apiKeyError || !session || !input.trim()}
-            tooltip={
-              apiKeyError || 
-              (!session ? "Creating session..." : "")
-            }
+            tooltip={apiKeyError || (!session ? "Creating session..." : "")}
             onClick={(e) => {
               e.preventDefault();
               handleSubmit(e);
