@@ -43,6 +43,7 @@ h1 {
 .message.user {
   background-color: #2b2b2b;
   margin-left: auto;
+  text-align: right;
 }
 
 .message.assistant {
@@ -120,16 +121,26 @@ button:disabled {
   position: relative;
 }
 
-.tooltip {
+.error-tooltip {
+  visibility: hidden;
   position: absolute;
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
-  background-color: #374151;
+  background-color: #dc2626;
   color: white;
   padding: 0.5rem;
   border-radius: 0.25rem;
   font-size: 0.875rem;
   white-space: nowrap;
   margin-bottom: 0.5rem;
+  z-index: 10;
+}
+
+.tooltip-container:hover .error-tooltip {
+  visibility: visible;
+}
+
+.message.user .flex {
+  justify-content: flex-end;
 }

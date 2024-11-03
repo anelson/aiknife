@@ -32,6 +32,7 @@ function App() {
   const [pendingMessages, setPendingMessages] = useState<Set<string>>(
     new Set(),
   );
+  const [messageErrors, setMessageErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     checkApiKey();
@@ -56,9 +57,11 @@ function App() {
       }),
 
       events.messageError.listen((event) => {
-        const message_id = event.payload.message_id;
-        const error = event.payload.error;
-        setApiKeyError(error);
+        const { message_id, error } = event.payload;
+        setMessageErrors(prev => ({
+          ...prev,
+          [message_id]: error
+        }));
         setPendingMessages(new Set());
       }),
     ]);
@@ -115,12 +118,22 @@ function App() {
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`message ${message.role} ${pendingMessages.has(message.id) ? "pending" : ""}`}
+              className={`message ${message.role} ${
+                pendingMessages.has(message.id) ? "pending" : ""
+              } ${messageErrors[message.id] ? "tooltip-container" : ""}`}
             >
-              {message.content}
-              {pendingMessages.has(message.id) && (
-                <span className="pending-indicator">...</span>
-              )}
+              <div className="flex items-center gap-2">
+                <span>{message.content}</span>
+                {messageErrors[message.id] && (
+                  <>
+                    <span className="text-red-500">⚠️</span>
+                    <span className="error-tooltip">{messageErrors[message.id]}</span>
+                  </>
+                )}
+                {pendingMessages.has(message.id) && (
+                  <span className="pending-indicator">...</span>
+                )}
+              </div>
             </div>
           ))}
         </div>
