@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { commands, events } from "./bindings";
-import type { ChatMessage, SessionHandle } from "./bindings";
+import type { ChatMessage, SessionHandle, Role } from "./bindings";
 import "./App.css";
 
 interface TooltipButtonProps {
@@ -141,7 +141,7 @@ function App() {
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`message ${message.role} ${
+              className={`message ${message.role.toLowerCase()} ${
                 pendingMessages.has(message.id) ? "pending" : ""
               } ${messageErrors[message.id] ? "tooltip-container" : ""}`}
             >

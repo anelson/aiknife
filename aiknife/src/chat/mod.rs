@@ -20,22 +20,30 @@ struct ChatCompletionRequest {
 
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "tauri", derive(Type))]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    User,
+    Assistant,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[cfg_attr(feature = "tauri", derive(Type))]
 pub struct Message {
-    role: String,
+    role: Role,
     content: String,
 }
 
 impl Message {
     pub fn new_user_message(content: String) -> Self {
         Self {
-            role: "user".to_string(),
+            role: Role::User,
             content,
         }
     }
 
     pub fn new_assistant_message(content: String) -> Self {
         Self {
-            role: "assistant".to_string(),
+            role: Role::Assistant,
             content,
         }
     }

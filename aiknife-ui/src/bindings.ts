@@ -35,11 +35,12 @@ messageResponse: "message-response"
 
 /** user-defined types **/
 
-export type ChatMessage = { id: string; role: string; content: string; status: MessageStatus }
+export type ChatMessage = { id: string; role: Role; content: string; status: MessageStatus }
 export type MessageError = { message_id: string; error: string }
 export type MessagePending = { message: ChatMessage }
 export type MessageResponse = { message: ChatMessage }
 export type MessageStatus = "Pending" | "Complete"
+export type Role = "user" | "assistant"
 export type SessionHandle = { id: string }
 
 /** tauri-specta globals **/

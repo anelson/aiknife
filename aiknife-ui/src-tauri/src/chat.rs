@@ -15,7 +15,7 @@ pub mod messages {
     #[derive(Serialize, Deserialize, Clone, specta::Type)]
     pub struct ChatMessage {
         pub(crate) id: uuid::Uuid,
-        pub(crate) role: String,
+        pub(crate) role: chat::Role,
         pub(crate) content: String,
         pub(crate) status: MessageStatus,
     }
@@ -93,7 +93,7 @@ pub async fn send_message(
     let message_id = uuid::Uuid::now_v7();
     let user_message = messages::ChatMessage {
         id: message_id,
-        role: "user".to_string(),
+        role: chat::Role::User,
         content: message.clone(),
         status: messages::MessageStatus::Pending,
     };
@@ -118,7 +118,7 @@ pub async fn send_message(
                 Ok(response) => {
                     let assistant_message = messages::ChatMessage {
                         id: uuid::Uuid::now_v7(),
-                        role: "assistant".to_string(),
+                        role: chat::Role::Assistant,
                         content: response,
                         status: messages::MessageStatus::Complete,
                     };
