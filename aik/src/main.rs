@@ -54,7 +54,8 @@ impl Commands {
                     aiknife::tokenize_files(aiknife::Tokenizer::Cl100kBase, files).await?;
                 } else {
                     info!("Not printing testing lists...");
-                    aiknife::tokenize_stream(aiknife::Tokenizer::Cl100kBase, std::io::stdin()).await?;
+                    aiknife::tokenize_stream(aiknife::Tokenizer::Cl100kBase, std::io::stdin())
+                        .await?;
                 };
 
                 if count {
@@ -104,7 +105,6 @@ async fn main() {
         }
         Some(command) => {
             if let Err(e) = command.execute(&cli.globals).await {
-
                 error!("{:#}", e);
                 exit(1);
             } else {

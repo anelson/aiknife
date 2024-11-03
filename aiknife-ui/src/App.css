@@ -34,113 +34,97 @@ h1 {
 }
 
 .message {
-  margin: 1rem 0;
-  padding: 1rem;
-  border-radius: 0.5rem;
-  max-width: 80%;
+  @apply p-4 rounded-lg mb-4 relative font-sans;
 }
 
 .message.user {
-  background-color: #2b2b2b;
-  margin-left: auto;
-  text-align: right;
+  @apply bg-blue-50;
 }
 
 .message.assistant {
-  background-color: #363636;
-  margin-right: auto;
+  @apply bg-gray-50;
 }
 
 .message.pending {
-  opacity: 0.7;
+  @apply opacity-70;
 }
 
 .pending-indicator {
-  display: inline-block;
-  margin-left: 0.5rem;
-  animation: pulse 1.5s infinite;
+  @apply animate-pulse text-gray-500;
 }
 
-@keyframes pulse {
-  0% { opacity: 0.4; }
-  50% { opacity: 1; }
-  100% { opacity: 0.4; }
+.abort-button {
+  @apply px-2 py-1 text-sm rounded-md 
+    bg-red-100 text-red-700 hover:bg-red-200 
+    transition-colors duration-150 ease-in-out;
 }
 
-form {
-  display: flex;
-  gap: 1rem;
-  outline: none;
+.retry-button {
+  @apply px-2 py-1 text-sm rounded-md 
+    bg-blue-100 text-blue-700 hover:bg-blue-200 
+    transition-colors duration-150 ease-in-out;
 }
 
-form:focus, form:active {
-  outline: none;
+.message .flex {
+  @apply items-start gap-3;
 }
 
-input {
-  flex: 1;
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  background-color: #2b2b2b;
-  color: white;
-  border: none;
+.message .flex-grow {
+  @apply whitespace-pre-wrap text-sm leading-relaxed;
 }
 
-input:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+/* Add explicit message text styling */
+.message.user .flex-grow {
+  @apply text-blue-900 !important;
+  font-family: system-ui, -apple-system, sans-serif;
 }
 
-button {
-  padding: 0.75rem 1.5rem;
-  border-radius: 0.5rem;
-  background-color: #0ea5e9;
-  color: white;
-  border: none;
-  cursor: pointer;
+.message.assistant .flex-grow {
+  @apply text-gray-900 !important;
+  font-family: system-ui, -apple-system, sans-serif;
 }
 
-button:hover:not(:disabled) {
-  background-color: #0284c7;
+/* Streaming animation */
+.message.pending .flex-grow {
+  @apply relative;
 }
 
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.message.pending .flex-grow::after {
+  content: '▋';
+  @apply absolute inline-block animate-pulse;
 }
 
+/* Error styling */
 .error-banner {
-  background-color: #dc2626;
-  color: white;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  border-radius: 0.5rem;
+  @apply bg-red-100 text-red-700 p-4 mb-4 rounded-lg 
+    border border-red-200 shadow-sm;
 }
 
+.error-trigger {
+  @apply inline-flex items-center justify-center
+    w-6 h-6 rounded-full hover:bg-red-100 
+    transition-colors duration-150 ease-in-out;
+}
+
+/* Modal backdrop */
+.modal-backdrop {
+  @apply fixed inset-0 bg-black bg-opacity-50 
+    backdrop-blur-sm z-50 
+    transition-opacity duration-200 ease-in-out;
+}
+
+/* Tooltip styling */
 .tooltip-container {
-  position: relative;
+  @apply relative inline-block;
 }
 
-.error-tooltip {
-  visibility: hidden;
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: #dc2626;
-  color: white;
-  padding: 0.5rem;
-  border-radius: 0.25rem;
-  font-size: 0.875rem;
-  white-space: nowrap;
-  margin-bottom: 0.5rem;
-  z-index: 10;
+.tooltip {
+  @apply absolute bottom-full left-1/2 transform -translate-x-1/2 
+    px-2 py-1 mb-2 text-xs text-white bg-gray-800 
+    rounded whitespace-nowrap opacity-0 
+    transition-opacity duration-200 ease-in-out;
 }
 
-.tooltip-container:hover .error-tooltip {
-  visibility: visible;
-}
-
-.message.user .flex {
-  justify-content: flex-end;
+.tooltip-container:hover .tooltip {
+  @apply opacity-100;
 }

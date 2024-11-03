@@ -1,9 +1,9 @@
 [package]
-authors = ["you"]
+authors     = ["you"]
 description = "AI Knife User Interface"
-edition = "2021"
-name = "aiknife-ui"
-version = "0.1.0"
+edition     = "2021"
+name        = "aiknife-ui"
+version     = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,28 +12,32 @@ version = "0.1.0"
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 crate-type = ["staticlib", "cdylib", "rlib"]
-name = "aiknife_ui_lib"
+name       = "aiknife_ui_lib"
 
 [build-dependencies]
 tauri-build = { workspace = true }
 
 [dependencies]
-aiknife = { path = "../../aiknife", features = ["tauri"] }
-serde = { workspace = true }
-uuid = { workspace = true }
-serde_json = { workspace = true }
-specta = { workspace = true }
-specta-typescript = { workspace = true }
-tauri = { workspace = true }
-tauri-plugin-shell = { workspace = true }
-tauri-specta = { workspace = true }
-thiserror = { workspace = true }
-anyhow = { workspace = true }
-tauri-plugin-log = "2"
-log = { workspace = true } # used only for the `LogLevel` enum
-tracing = { workspace = true, features = ["log", "log-always"] } # forward all events to `log` crate
+aiknife                      = { path = "../../aiknife", features = ["tauri"] }
+anyhow                       = { workspace = true }
+async-openai.workspace       = true
+futures                      = { workspace = true }                                   # used only for the `LogLevel` enum
+log                          = { workspace = true }                                   # used only for the `LogLevel` enum
+serde                        = { workspace = true }
+serde_json                   = { workspace = true }
+specta                       = { workspace = true }
+specta-typescript            = { workspace = true }
+strum.workspace              = true
+tauri                        = { workspace = true }
+tauri-plugin-log             = "2"
+tauri-plugin-shell           = { workspace = true }
+tauri-specta                 = { workspace = true }
+thiserror                    = { workspace = true }
+tokio                        = { workspace = true }
+tokio-util                   = { workspace = true }
+tracing                      = { workspace = true, features = ["log", "log-always"] } # forward all events to `log` crate
 tracing-subscriber.workspace = true
-strum.workspace = true
+uuid                         = { workspace = true }
 
 [dev-dependencies]
 expect-test.workspace = true
