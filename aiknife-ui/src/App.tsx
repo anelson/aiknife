@@ -24,51 +24,74 @@ const TooltipButton: React.FC<TooltipButtonProps> = ({
   </div>
 );
 
-function App() {
+interface MessageState {
+  messages: ChatMessage[];
+  pendingMessages: Set<string>;
+  messageErrors: Record<string, string>;
+}
+
+function useMessageEvents(): MessageState {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [pendingMessages, setPendingMessages] = useState<Set<string>>(new Set());
+  const [messageErrors, setMessageErrors] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let mounted = true;
+
+    const setupListeners = async () => {
+      const unlisteners = await Promise.all([
+        events.messagePending.listen((event) => {
+          if (!mounted) return;
+          const message: ChatMessage = event.payload.message;
+          setMessages((prev) => [...prev, message]);
+          setPendingMessages((prev) => new Set(prev).add(message.id));
+        }),
+
+        events.messageResponse.listen((event) => {
+          if (!mounted) return;
+          const message: ChatMessage = event.payload.message;
+          setMessages((prev) => [...prev, message]);
+          setPendingMessages((prev) => {
+            const newSet = new Set(prev);
+            const lastPending = Array.from(newSet).pop();
+            if (lastPending) newSet.delete(lastPending);
+            return newSet;
+          });
+        }),
+
+        events.messageError.listen((event) => {
+          if (!mounted) return;
+          const { message_id, error } = event.payload;
+          setMessageErrors(prev => ({
+            ...prev,
+            [message_id]: error
+          }));
+          setPendingMessages(new Set());
+        }),
+      ]);
+      
+      return () => unlisteners.forEach(u => u());
+    };
+
+    const cleanup = setupListeners();
+    return () => {
+      mounted = false;
+      cleanup.then(cleanupFn => cleanupFn?.());
+    };
+  }, []);
+
+  return { messages, pendingMessages, messageErrors };
+}
+
+function App() {
+  const { messages, pendingMessages, messageErrors } = useMessageEvents();
   const [input, setInput] = useState("");
   const [apiKeyError, setApiKeyError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionHandle | null>(null);
-  const [pendingMessages, setPendingMessages] = useState<Set<string>>(
-    new Set(),
-  );
-  const [messageErrors, setMessageErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     checkApiKey();
     createSession();
-
-    const unlisten = Promise.all([
-      events.messagePending.listen((event) => {
-        const message: ChatMessage = event.payload.message;
-        setMessages((prev) => [...prev, message]);
-        setPendingMessages((prev) => new Set(prev).add(message.id));
-      }),
-
-      events.messageResponse.listen((event) => {
-        const message: ChatMessage = event.payload.message;
-        setMessages((prev) => [...prev, message]);
-        setPendingMessages((prev) => {
-          const newSet = new Set(prev);
-          const lastPending = Array.from(newSet).pop();
-          if (lastPending) newSet.delete(lastPending);
-          return newSet;
-        });
-      }),
-
-      events.messageError.listen((event) => {
-        const { message_id, error } = event.payload;
-        setMessageErrors(prev => ({
-          ...prev,
-          [message_id]: error
-        }));
-        setPendingMessages(new Set());
-      }),
-    ]);
-
-    return () => {
-      unlisten.then((unlisteners) => unlisteners.forEach((u) => u()));
-    };
   }, []);
 
   const checkApiKey = async () => {
