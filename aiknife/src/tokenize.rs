@@ -252,9 +252,7 @@ pub async fn tokenize_file(
 mod tests {
     use std::fs::File;
     use std::io::{BufRead, BufReader};
-
     use walkdir::WalkDir;
-
     use super::*;
 
     /// For each of the files in `test_data/input`, we have pre-computed expected tokens from the
