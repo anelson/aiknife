@@ -1,7 +1,7 @@
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
-use std::process::{exit, Stdio};
-use tracing::{debug, error, info, trace, warn};
+use std::process::exit;
+use tracing::*;
 use tracing_subscriber::{filter::LevelFilter, EnvFilter, FmtSubscriber};
 
 #[derive(Parser)]
@@ -30,39 +30,15 @@ enum Commands {
     /// Tokenize a file or stdin.
     ///
     /// Tokens are written to stdout, one token per line.
-    Tokenize {
-        /// The file or files to tokenize.
-        ///
-        /// If no files are specified, this command will read from standard input.
-        files: Vec<PathBuf>,
-
-        /// Don't actually output the tokens, just perform the tokenization and count how many
-        /// tokens there are.
-        #[arg(long)]
-        count: bool,
-    },
+    Tokenize {},
 }
 
 impl Commands {
     async fn execute(self, globals: &Globals) -> anyhow::Result<()> {
         use Commands::*;
         match self {
-            Tokenize { files, count } => {
-                let _tokens = if !files.is_empty() {
-                    info!("Printing testing lists...");
-                    info!("  {files:?}");
-                    aiknife::tokenize_files(aiknife::Tokenizer::Cl100kBase, files).await?;
-                } else {
-                    info!("Not printing testing lists...");
-                    aiknife::tokenize_stream(aiknife::Tokenizer::Cl100kBase, std::io::stdin())
-                        .await?;
-                };
-
-                if count {
-                    todo!()
-                } else {
-                    todo!()
-                }
+            Tokenize {} => {
+                todo!()
             }
         }
     }
