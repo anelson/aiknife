@@ -27,17 +27,16 @@ struct Globals {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Tokenize a file or stdin.
-    ///
-    /// Tokens are written to stdout, one token per line.
-    Tokenize {},
+    /// Use Whisper to transcribe audio to text
+    Whisper {},
 }
 
 impl Commands {
     async fn execute(self, globals: &Globals) -> anyhow::Result<()> {
         use Commands::*;
         match self {
-            Tokenize {} => {
+            Whisper {} => {
+                println!("Shhh!");
                 todo!()
             }
         }
