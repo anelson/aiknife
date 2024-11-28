@@ -13,6 +13,7 @@ tauri = ["dep:specta"]
 anyhow       = { workspace = true }
 async-openai = { workspace = true }
 cpal         = { workspace = true }
+crossbeam    = { workspace = true }
 either       = { workspace = true }
 futures      = { workspace = true }
 itertools    = { workspace = true }
