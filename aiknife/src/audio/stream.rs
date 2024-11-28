@@ -3,11 +3,12 @@
 //! Streams represent either audio coming in for processing, or being produced as output.  To the
 //! extent possible they are abstracted away from the underlying audio device.
 use anyhow::Result;
+use std::fmt::Debug;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
 use std::time::Duration;
 
-pub trait AudioStreamGuard: Send {
+pub trait AudioStreamGuard: Debug + Send + 'static {
     /// Explicitly stop the stream.  This is a no-op if the stream is already stopped.
     /// The stream is also stopped once this guard is dropped.
     fn stop_stream(&mut self);
@@ -19,7 +20,9 @@ pub trait AudioStreamGuard: Send {
 /// stream of audio data, in the sense that it streams from an unbounded input (usually a
 /// microphone).  But it's not a Rust `Stream`, but rather an `Iterator`.  Up to this point there
 /// has not been any reason to make the audio processing part of the solution async.
-pub trait AudioInputStream: Send + Iterator<Item = Result<AudioInputChunk>> {
+pub trait AudioInputStream:
+    Debug + Send + Iterator<Item = Result<AudioInputChunk>> + 'static
+{
     /// The name of the device this input is connected to.
     fn device_name(&self) -> &str;
 
@@ -33,6 +36,7 @@ pub trait AudioInputStream: Send + Iterator<Item = Result<AudioInputChunk>> {
 /// Implementation of [`AudioInputStream`] that gets the audio samples from a
 /// [`crossbeam::channel::bounded::Receiver`], the sending
 /// side of which is presumably reading it from a device and pushing it onto the channel.
+#[derive(Debug)]
 pub(crate) struct AudioInputCrossbeamChannelReceiver {
     device_name: String,
     sample_rate: NonZeroU32,

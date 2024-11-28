@@ -406,12 +406,20 @@ impl super::AudioInput for AudioInputDevice {
         };
 
         debug!(bound, ?config.max_buffered_duration, buffer_size = ?stream_config.buffer_size(), "Creating crossbeam channel");
-        let (sender, receiver) = crossbeam::channel::bounded(bound);
+        let (chunk_sender, chunk_receiver) = crossbeam::channel::bounded(bound);
 
-        let guard = cpal_stream_host(stream_config, config.clone(), self.device.clone(), sender);
+        let guard = cpal_stream_host(
+            stream_config,
+            config.clone(),
+            self.device.clone(),
+            chunk_sender,
+        )?;
 
-        let stream =
-            stream::AudioInputCrossbeamChannelReceiver::new(device_name, sample_rate, receiver);
+        let stream = stream::AudioInputCrossbeamChannelReceiver::new(
+            device_name,
+            sample_rate,
+            chunk_receiver,
+        );
         Ok((Box::new(guard), Box::new(stream)))
     }
 }
@@ -451,7 +459,7 @@ fn cpal_stream_host(
     config: Arc<audio::AudioInputConfig>,
     device: AudioDevice,
     chunk_sender: crossbeam::channel::Sender<Result<AudioInputChunk>>,
-) -> CpalStreamGuard {
+) -> Result<CpalStreamGuard> {
     /// As if this wasn't mind-bending enough, a nested function that is called from the spawned
     /// cpal::Stream thread, to actually create the stream.  This is a convenience, which let's use
     /// use `?` sigils for error handling, so that the actual thread host only has to check for and
@@ -548,6 +556,12 @@ fn cpal_stream_host(
     // Use a zero-length channel to signal the stream thread to stop.
     let (abort_sender, abort_receiver) = crossbeam::channel::bounded(0);
 
+    // And another one to get the result, success or failure, of the operation that actuall creates
+    // the stream and starts it playing.  If that fails we want to propagate that error back to the
+    // caller of this function rather than sticking it in the chunks channel which will be more
+    // awkward to handle, especially in tests.
+    let (init_result_sender, init_result_receiver) = crossbeam::channel::bounded(0);
+
     let current_span = Span::current();
 
     // Create the cpal stream for this device, using callbacks to push the audio data into the
@@ -569,7 +583,7 @@ fn cpal_stream_host(
                 Ok(stream) => stream,
                 Err(e) => {
                     error!(%e, "Error creating audio stream");
-                    let _ = chunk_sender
+                    let _ = init_result_sender
                         .send(Err(e).with_context(|| "Error creating audio stream".to_string()));
                     anyhow::bail!("Error creating audio stream");
                 }
@@ -578,13 +592,18 @@ fn cpal_stream_host(
         debug!("Starting audio stream");
         if let Err(e) = cpal_stream.play() {
             error!(%e, "Error starting audio stream");
-            let _ = chunk_sender.send(Err(e).with_context(|| "Error in audio stream".to_string()));
+            let _ = init_result_sender
+                .send(Err(e).with_context(|| "Error in audio stream".to_string()));
 
             // No one will see this returned error from the thread, but when this scope ends the
             // channel sender for audio chunks will go out of scope, which will cause the receiver
             // to fail when it tries to read from an empty channel.
             anyhow::bail!("Error starting audio stream");
         }
+
+        // Else, stream was created and started playing so signal back to the main thread that this
+        // worked, and then wait around for an abort signal
+        let _ = init_result_sender.send(Ok(()));
 
         // Wait for the abort signal
         match abort_receiver.recv() {
@@ -603,7 +622,16 @@ fn cpal_stream_host(
         Result::<()>::Ok(())
     });
 
-    return CpalStreamGuard(Arc::new(abort_sender));
+    // Wait for the stream to be created and started, or for an error to occur
+    // If the recv operation itself fails, it means a bug in the thread code since there is not
+    // supposed to be any path out of that stream initialization code that doesn't send a message
+    let init_result = init_result_receiver
+        .recv()
+        .context("BUG: stream worker thread init code failed in an unexpected way")?;
+
+    init_result?;
+
+    return Ok(CpalStreamGuard(Arc::new(abort_sender)));
 }
 
 #[derive(Clone, Debug)]
@@ -629,8 +657,11 @@ impl AudioOutputDevice {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroUsize;
+
     use super::*;
     use assertables::assert_contains;
+    use audio::AudioInput;
 
     #[test]
     fn test_list_device_names() -> Result<()> {
@@ -715,7 +746,7 @@ mod tests {
         for input_name in inputs {
             let result = AudioOutputDevice::find_device_by_name(&input_name);
             if let Err(err) = result {
-                assert_contains!(err.to_string(), "Audio output device not found");
+                assert_contains!(format!("{err:?}"), "Audio output device not found");
             }
         }
 
@@ -723,7 +754,7 @@ mod tests {
         for output_name in outputs {
             let result = AudioInputDevice::find_device_by_name(&output_name);
             if let Err(err) = result {
-                assert_contains!(err.to_string(), "Audio input device not found");
+                assert_contains!(format!("{err:?}"), "Audio input device not found");
             }
         }
 
@@ -733,5 +764,119 @@ mod tests {
     fn assert_valid_stream_config(config: &cpal::SupportedStreamConfig) {
         assert!(config.sample_rate().0 > 0, "Sample rate should be positive");
         assert!(config.channels() > 0, "Channel count should be positive");
+    }
+
+    #[test]
+    fn test_audio_input_stream() -> Result<()> {
+        crate::test_helpers::init_test_logging();
+
+        // Skip test if no default input device
+        let host = cpal::default_host();
+        let Some(_) = host.default_input_device() else {
+            debug!("Skipping test_audio_input_stream: no default input device available");
+            return Ok(());
+        };
+
+        let mut input_device =
+            AudioInputDevice::find_device(super::super::AudioInputDevice::Default)?;
+
+        let config = Arc::new(audio::AudioInputConfig {
+            max_buffered_duration: Duration::from_secs(2),
+            ..Default::default()
+        });
+
+        let (mut guard, mut stream) = input_device.start_stream(config)?;
+
+        // Collect ~1 second of audio
+        let mut samples = Vec::new();
+        loop {
+            let chunk = match stream.next() {
+                Some(result) => result.unwrap(),
+                None => break,
+            };
+
+            samples.extend(chunk.samples);
+            if chunk.timestamp.as_secs_f64() > 1.0 {
+                guard.stop_stream();
+            }
+        }
+
+        // Verify we got some samples
+        assert!(!samples.is_empty(), "Should have received audio samples");
+
+        // Check that the audio isn't completely silent
+        // We use a very small threshold to account for extremely quiet environments
+        let has_non_zero = samples.iter().any(|&s| s.abs() > 0.0001);
+        assert!(has_non_zero, "Audio appears to be completely silent");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_audio_input_invalid_sample_rate() -> Result<()> {
+        crate::test_helpers::init_test_logging();
+
+        // Skip test if no default input device
+        let host = cpal::default_host();
+        let Some(_) = host.default_input_device() else {
+            debug!(
+                "Skipping test_audio_input_invalid_sample_rate: no default input device available"
+            );
+            return Ok(());
+        };
+
+        let mut input_device =
+            AudioInputDevice::find_device(super::super::AudioInputDevice::Default)?;
+
+        // Try to request an impossibly high sample rate
+        let config = Arc::new(audio::AudioInputConfig {
+            input_sample_rate: Some(NonZeroU32::new(10_000_000).unwrap()),
+            max_buffered_duration: Duration::from_secs(1),
+            ..Default::default()
+        });
+
+        let result = input_device.start_stream(config);
+        assert!(result.is_err(), "Should fail with invalid sample rate");
+        assert_contains!(
+            format!("{:?}", result.unwrap_err()),
+            "Requested sample rate",
+            "Error should mention sample rate issue"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_audio_input_multi_channel_selection() -> Result<()> {
+        crate::test_helpers::init_test_logging();
+
+        // Skip test if no default input device
+        let host = cpal::default_host();
+        let Some(_) = host.default_input_device() else {
+            debug!("Skipping test_audio_input_multi_channel_selection: no default input device available");
+            return Ok(());
+        };
+
+        let mut input_device =
+            AudioInputDevice::find_device(super::super::AudioInputDevice::Default)?;
+
+        let config = Arc::new(audio::AudioInputConfig {
+            max_buffered_duration: Duration::from_secs(1),
+            channel: Some(NonZeroUsize::new(1).unwrap()), // Try to select second channel
+            ..Default::default()
+        });
+
+        let result = input_device.start_stream(config);
+        assert!(
+            result.is_err(),
+            "Should fail when trying to select specific channel"
+        );
+        assert_contains!(
+            format!("{:?}", result.unwrap_err()),
+            "not yet implemented",
+            "Error should mention channel selection not implemented"
+        );
+
+        Ok(())
     }
 }
