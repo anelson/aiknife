@@ -15,13 +15,13 @@ use symphonia::core::{
 };
 use tracing::*;
 
-pub(crate) struct FileAudioDevice {
+pub(crate) struct FileAudioInput {
     file_path: PathBuf,
     device_name: String,
 }
 
-impl FileAudioDevice {
-    pub(crate) fn new(file_path: impl Into<PathBuf>) -> Result<Self> {
+impl FileAudioInput {
+    pub fn new(file_path: impl Into<PathBuf>) -> Result<Self> {
         let file_path = file_path.into();
         let device_name = format!("file:{}", file_path.display());
 
@@ -32,7 +32,7 @@ impl FileAudioDevice {
     }
 }
 
-impl device::AudioInput for FileAudioDevice {
+impl device::AudioInput for FileAudioInput {
     fn device_name(&self) -> &str {
         &self.device_name
     }
@@ -40,11 +40,13 @@ impl device::AudioInput for FileAudioDevice {
     #[instrument(skip_all, fields(path = %self.file_path.display()))]
     fn start_stream(
         &mut self,
-        config: Arc<audio::AudioInputConfig>,
+        config: audio::AudioInputConfig,
     ) -> Result<(
         Box<dyn audio::AudioStreamGuard>,
         Box<dyn audio::AudioInputStream>,
     )> {
+        let config = Arc::new(config);
+
         // Open the media source
         let file = std::fs::File::open(&self.file_path)?;
         let mss = MediaSourceStream::new(Box::new(file), Default::default());
@@ -260,9 +262,9 @@ mod tests {
 
         let test_file = test_short_audio_file_path();
 
-        let mut device = FileAudioDevice::new(&test_file)?;
+        let mut device = FileAudioInput::new(&test_file)?;
 
-        let config = Arc::new(audio::AudioInputConfig::default());
+        let config = audio::AudioInputConfig::default();
 
         let (_guard, stream) = device.start_stream(config)?;
 
@@ -293,8 +295,8 @@ mod tests {
         let test_file = test_long_audio_file_path();
 
         // First get the total number of samples by reading the whole file
-        let mut device = FileAudioDevice::new(&test_file)?;
-        let config = Arc::new(audio::AudioInputConfig::default());
+        let mut device = FileAudioInput::new(&test_file)?;
+        let config = audio::AudioInputConfig::default();
 
         let (_guard, stream) = device.start_stream(config.clone())?;
         let mut total_samples = 0;
@@ -306,7 +308,7 @@ mod tests {
         println!("Long sample contains {total_samples} samples");
 
         // Now read again but stop after first chunk
-        let mut device = FileAudioDevice::new(&test_file)?;
+        let mut device = FileAudioInput::new(&test_file)?;
         let (mut guard, mut stream) = device.start_stream(config)?;
 
         // Get first chunk
@@ -344,8 +346,8 @@ mod tests {
             debug!("Testing file: {}", test_file.display());
 
             // First read using our FileAudioDevice
-            let mut device = FileAudioDevice::new(&test_file)?;
-            let config = Arc::new(audio::AudioInputConfig::default());
+            let mut device = FileAudioInput::new(&test_file)?;
+            let config = audio::AudioInputConfig::default();
             let (_guard, stream) = device.start_stream(config)?;
 
             // Collect all samples from our device

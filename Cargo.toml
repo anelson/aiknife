@@ -19,6 +19,7 @@ base64             = "0.21.0"
 clap               = { version = "4.1.13", features = ["derive", "env"] }
 cpal               = "0.15.3"
 crossbeam          = { version = "0.8.4", features = ["crossbeam-channel"] }
+ctrlc              = "3.4.5"
 either             = "1.13.0"
 expect-test        = "1.5.0"
 fancy-regex        = "0.11.0"

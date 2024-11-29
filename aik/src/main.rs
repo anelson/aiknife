@@ -1,5 +1,6 @@
 use aiknife::audio;
 use clap::{Args, Parser, Subcommand};
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::exit;
 use tracing::*;
@@ -39,6 +40,23 @@ enum Commands {
 enum WhisperCommands {
     /// List all available audio devices
     ListDevices,
+
+    /// Transcribe audio using the Whisper model running locally
+    Transcribe {
+        /// Use a specific audio device specified by name.
+        ///
+        /// If no device or file is specified, the default behavior is to use the default input device.
+        #[arg(long, group = "audio_source")]
+        device: Option<String>,
+
+        /// Read the audio from a file on the filesystem.
+        /// Most audio formats are supported.
+        ///
+        /// If no file or device is specified, the default behavior is to use the default input device.
+        #[arg(long, group = "audio_source")]
+        file: Option<PathBuf>,
+        // TODO: Decide what if any more fields from audio::AudioInputConfig should be exposed here
+    },
 }
 
 impl Commands {
@@ -59,11 +77,45 @@ impl Commands {
                     for device in output {
                         println!("  {}", device);
                     }
+                }
+                WhisperCommands::Transcribe { device, file } => {
+                    let source = if let Some(device) = device {
+                        audio::AudioSource::Device(device)
+                    } else if let Some(file) = file {
+                        audio::AudioSource::File(file)
+                    } else {
+                        debug!("No audio source specified, attempting to use system default input device");
+                        audio::AudioSource::Default
+                    };
 
-                    Ok(())
+                    let config = audio::AudioInputConfig {
+                        source,
+                        ..Default::default()
+                    };
+
+                    let mut input = audio::open_audio_input(config.source.clone())?;
+
+                    let (mut guard, stream) = input.start_stream(config)?;
+
+                    println!("Listening to {}", stream.device_name());
+                    ctrlc::set_handler(move || {
+                        println!("Ctrl-C detected; Stopping stream...");
+                        guard.stop_stream();
+                    })?;
+
+                    let mut total_samples = 0;
+                    for result in stream {
+                        let chunk = result?;
+                        total_samples += chunk.samples.len();
+                        print!("\rRead samples: {}", total_samples);
+                        std::io::stdout().flush()?;
+                    }
+                    println!("\rRead {total_samples} samples in total");
                 }
             },
         }
+
+        Ok(())
     }
 }
 

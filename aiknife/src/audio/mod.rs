@@ -5,7 +5,6 @@ pub use device::*;
 mod stream;
 pub use stream::*;
 
-use anyhow::Result;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -15,10 +14,23 @@ use std::time::Duration;
 /// at least this high to ensure the model has high enough quality input.
 const DEFAULT_MODEL_SAMPLE_RATE: u32 = 16000;
 
+/// Possible places we can get audio from
+#[derive(Clone, Debug)]
+pub enum AudioSource {
+    /// Use that system default input device.  Fail if there is no suitable default device.
+    Default,
+
+    /// Use a specific audio device specified by name
+    Device(String),
+
+    /// Use a virtual audio device that reads audio from a file.
+    File(PathBuf),
+}
+
 #[derive(Clone, Debug)]
 pub struct AudioInputConfig {
     /// The source of the audio to operate on.
-    pub source: device::AudioSource,
+    pub source: AudioSource,
 
     /// The audio channel (1-based) to use for audio acquisition.  If `None`,
     /// then if the audio device has multiple audio channels they will be merged into a single mono

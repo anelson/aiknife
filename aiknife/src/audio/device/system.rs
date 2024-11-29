@@ -3,10 +3,7 @@
 //!
 //! TODO: Handle changes to available system audio devices on the fly (ie, AirPods connecting to a
 //! Mac).
-use crate::{
-    audio::{self as audio, stream, AudioInputChunk},
-    util::threading,
-};
+use crate::{audio, util::threading};
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use either::Either;
@@ -37,7 +34,7 @@ fn devices_iter_to_device_names<'a>(devices: impl Iterator<Item = &'a AudioDevic
 ///
 /// Any errors describing a particular device are logged but will not fail this function.  Devices
 /// with errors are excluded from the list of discovered devices.
-fn list_devices() -> Result<(Vec<AudioInputDevice>, Vec<AudioOutputDevice>)> {
+fn list_devices() -> Result<(Vec<DeviceAudioInput>, Vec<AudioOutputDevice>)> {
     let mut devices = Vec::new();
 
     for host_id in cpal::available_hosts() {
@@ -83,7 +80,7 @@ fn list_devices() -> Result<(Vec<AudioInputDevice>, Vec<AudioOutputDevice>)> {
                         "Found output device")
             }
         })
-        .partition_map(|either: Either<AudioInputDevice, AudioOutputDevice>| either);
+        .partition_map(|either: Either<DeviceAudioInput, AudioOutputDevice>| either);
 
     Ok((input_devices, output_devices))
 }
@@ -191,12 +188,12 @@ impl AudioDevice {
 
     /// Check if this is an input device suitable for use with audio processing models.
     /// If so, convert it into [`AudioInputDevice`], if not return `self` as `Err`.
-    fn try_into_input_device(self) -> Result<AudioInputDevice, Self> {
+    fn try_into_input_device(self) -> Result<DeviceAudioInput, Self> {
         match (
             self.inner.default_input_config(),
             self.inner.supported_input_configs(),
         ) {
-            (Ok(default_config), Ok(supported_input_configs)) => Ok(AudioInputDevice {
+            (Ok(default_config), Ok(supported_input_configs)) => Ok(DeviceAudioInput {
                 device: self,
                 default_config,
                 supported_configs: supported_input_configs.collect(),
@@ -239,13 +236,13 @@ impl AudioDevice {
 }
 
 #[derive(Clone, Debug)]
-pub struct AudioInputDevice {
+pub(crate) struct DeviceAudioInput {
     device: AudioDevice,
     default_config: cpal::SupportedStreamConfig,
     supported_configs: Vec<cpal::SupportedStreamConfigRange>,
 }
 
-impl AudioInputDevice {
+impl DeviceAudioInput {
     /// Given the name of an audio input device that was presumably previously returned by
     /// [`list_devices`], try to find the device now and use it as an input device.
     pub fn find_device_by_name(name: &str) -> Result<Self> {
@@ -258,12 +255,12 @@ impl AudioInputDevice {
         }
     }
 
-    /// Find an audio input device that satisfies the given [`super::AudioSource`] enum.
+    /// Find an audio input device that satisfies the given [`audio::AudioSource`] enum.
     ///
     /// If the request cannot be satisfied, fails with a meaningful error.
-    pub fn find_device(source: super::AudioSource) -> Result<Self> {
+    pub fn from_source(source: audio::AudioSource) -> Result<Self> {
         match source {
-            super::AudioSource::Default => {
+            audio::AudioSource::Default => {
                 let host = cpal::default_host();
                 let device = host
                     .default_input_device()
@@ -286,8 +283,8 @@ impl AudioInputDevice {
                     supported_configs,
                 })
             }
-            super::AudioSource::Device(name) => Self::find_device_by_name(&name),
-            super::AudioSource::File(_) => {
+            audio::AudioSource::Device(name) => Self::find_device_by_name(&name),
+            audio::AudioSource::File(_) => {
                 anyhow::bail!(
                     "BUG: File device should have been handled at a higher level of abstraction"
                 )
@@ -296,7 +293,7 @@ impl AudioInputDevice {
     }
 }
 
-impl super::AudioInput for AudioInputDevice {
+impl super::AudioInput for DeviceAudioInput {
     fn device_name(&self) -> &str {
         &self.device.device_name
     }
@@ -304,11 +301,12 @@ impl super::AudioInput for AudioInputDevice {
     #[instrument(skip_all, fields(device_name = %self.device.device_name))]
     fn start_stream(
         &mut self,
-        config: Arc<audio::AudioInputConfig>,
+        config: audio::AudioInputConfig,
     ) -> Result<(
         Box<dyn super::AudioStreamGuard>,
         Box<dyn super::AudioInputStream>,
     )> {
+        let config = Arc::new(config);
         debug!(isr = ?config.input_sample_rate, "Selecting stream config for input device");
 
         // Determine the stream configuration to use based on the audio input config.
@@ -428,9 +426,9 @@ impl super::AudioInput for AudioInputDevice {
             "Ready to start a worker thread to contain the CPAL stream");
 
         let (stop_signal_sender, chunks_receiver) =
-            cpal_stream_host(stream_config, config.clone(), self.device.clone(), bound)?;
+            cpal_stream_host(stream_config, self.device.clone(), bound)?;
 
-        let stream = stream::AudioInputThreadingChunksReceiver::new(
+        let stream = audio::AudioInputThreadingChunksReceiver::new(
             device_name,
             sample_rate,
             chunks_receiver,
@@ -455,12 +453,11 @@ impl super::AudioInput for AudioInputDevice {
 #[instrument(skip_all)]
 fn cpal_stream_host(
     stream_config: cpal::SupportedStreamConfig,
-    config: Arc<audio::AudioInputConfig>,
     device: AudioDevice,
     chunk_channel_bound: usize,
 ) -> Result<(
     threading::StopSignalSender,
-    threading::CombinedOutputReceiver<AudioInputChunk>,
+    threading::CombinedOutputReceiver<audio::AudioInputChunk>,
 )> {
     let (stop_signal_sender, running_receiver, final_receiver) =
         threading::start_func_as_thread_worker(
@@ -505,7 +502,7 @@ fn cpal_stream_host(
                         // samples.
                         if let Err(e) = data_callback_sender.try_send(Ok(chunk)) {
                             if let crossbeam::channel::TrySendError::Full(Ok(chunk)) = e {
-                                    warn!(samples = chunk.samples.len(), ?chunk.timestamp, ?chunk.duration, "Audio channel is full; dropping all of the samples in this chunk");
+                                    warn!(samples, ?chunk.timestamp, ?chunk.duration, "Audio channel is full; dropping all of the samples in this chunk");
                             }
                         }
                     }
@@ -625,7 +622,7 @@ mod tests {
 
         // Test looking up each input device by name
         for input_name in inputs {
-            AudioInputDevice::find_device_by_name(&input_name)
+            DeviceAudioInput::find_device_by_name(&input_name)
                 .expect("Should be able to look up existing input device");
         }
 
@@ -662,7 +659,7 @@ mod tests {
 
         // Try to open output devices as input devices
         for output_name in outputs {
-            let result = AudioInputDevice::find_device_by_name(&output_name);
+            let result = DeviceAudioInput::find_device_by_name(&output_name);
             if let Err(err) = result {
                 assert_contains!(format!("{err:?}"), "Audio input device not found");
             }
@@ -687,12 +684,12 @@ mod tests {
             return Ok(());
         };
 
-        let mut input_device = AudioInputDevice::find_device(super::super::AudioSource::Default)?;
+        let mut input_device = DeviceAudioInput::from_source(audio::AudioSource::Default)?;
 
-        let config = Arc::new(audio::AudioInputConfig {
+        let config = audio::AudioInputConfig {
             max_buffered_duration: Duration::from_secs(2),
             ..Default::default()
-        });
+        };
 
         let (mut guard, mut stream) = input_device.start_stream(config)?;
 
@@ -734,14 +731,14 @@ mod tests {
             return Ok(());
         };
 
-        let mut input_device = AudioInputDevice::find_device(super::super::AudioSource::Default)?;
+        let mut input_device = DeviceAudioInput::from_source(audio::AudioSource::Default)?;
 
         // Try to request an impossibly high sample rate
-        let config = Arc::new(audio::AudioInputConfig {
+        let config = audio::AudioInputConfig {
             input_sample_rate: Some(NonZeroU32::new(10_000_000).unwrap()),
             max_buffered_duration: Duration::from_secs(1),
             ..Default::default()
-        });
+        };
 
         let result = input_device.start_stream(config);
         assert!(result.is_err(), "Should fail with invalid sample rate");
@@ -765,13 +762,13 @@ mod tests {
             return Ok(());
         };
 
-        let mut input_device = AudioInputDevice::find_device(super::super::AudioSource::Default)?;
+        let mut input_device = DeviceAudioInput::from_source(audio::AudioSource::Default)?;
 
-        let config = Arc::new(audio::AudioInputConfig {
+        let config = audio::AudioInputConfig {
             max_buffered_duration: Duration::from_secs(1),
             channel: Some(NonZeroUsize::new(1).unwrap()), // Try to select second channel
             ..Default::default()
-        });
+        };
 
         let result = input_device.start_stream(config);
         assert!(
@@ -798,12 +795,12 @@ mod tests {
             return Ok(());
         };
 
-        let mut input_device = AudioInputDevice::find_device(super::super::AudioSource::Default)?;
+        let mut input_device = DeviceAudioInput::from_source(audio::AudioSource::Default)?;
 
-        let config = Arc::new(audio::AudioInputConfig {
+        let config = audio::AudioInputConfig {
             max_buffered_duration: Duration::from_secs(2),
             ..Default::default()
-        });
+        };
 
         let (guard, mut stream) = input_device.start_stream(config)?;
 
