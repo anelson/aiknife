@@ -79,22 +79,23 @@ async fn main() {
                 .from_env_lossy(),
         )
         .json()
+        .with_writer(std::io::stderr)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("Failed to set subscriber");
 
     // You can check the value provided by positional arguments, or option arguments
     if let Some(config_path) = cli.globals.config.as_deref() {
-        info!("Value for config: {}", config_path.display());
+        debug!("Value for config: {}", config_path.display());
     }
 
     // You can see how many times a particular flag or argument occurred
     // Note, only flags can have multiple occurrences
     match cli.globals.debug {
-        0 => info!("Debug mode is off"),
-        1 => info!("Debug mode is kind of on"),
-        2 => info!("Debug mode is on"),
-        _ => info!("Don't be crazy"),
+        0 => debug!("Debug mode is off"),
+        1 => debug!("Debug mode is kind of on"),
+        2 => debug!("Debug mode is on"),
+        _ => debug!("Don't be crazy"),
     }
 
     match cli.command {
