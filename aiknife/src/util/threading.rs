@@ -494,4 +494,202 @@ pub(crate) fn start_thread_worker<T: ThreadWorkerInit>(
 }
 
 #[cfg(test)]
-mod test {}
+mod test {
+    use super::*;
+    use std::time::Duration;
+
+    // A simple test worker that counts up to a number
+    struct TestWorkerInit {
+        count_to: u32,
+        delay_ms: u64,
+    }
+
+    struct TestWorker {
+        count_to: u32,
+        delay_ms: u64,
+    }
+
+    impl ThreadWorkerInit for TestWorkerInit {
+        type Work = TestWorker;
+        type RunningOutput = u32;
+
+        fn running_output_channel_bound(&self) -> usize {
+            5
+        }
+
+        fn init(
+            self,
+            _running_output: RunningOutputSender<Self::RunningOutput>,
+        ) -> Result<Self::Work> {
+            Ok(TestWorker {
+                count_to: self.count_to,
+                delay_ms: self.delay_ms,
+            })
+        }
+    }
+
+    impl ThreadWorkerWork for TestWorker {
+        type RunningOutput = u32;
+        type FinalOutput = u32;
+
+        fn worker_name() -> &'static str {
+            "test_worker"
+        }
+
+        fn run(
+            self,
+            stop_signal: StopSignalReceiver,
+            running_output: RunningOutputSender<Self::RunningOutput>,
+        ) -> Result<Self::FinalOutput> {
+            let mut current = 0;
+            while current < self.count_to {
+                if stop_signal.is_stop_signaled() {
+                    return Ok(current);
+                }
+                current += 1;
+                let _ = running_output.send(current);
+                if self.delay_ms > 0 {
+                    thread::sleep(Duration::from_millis(self.delay_ms));
+                }
+            }
+            Ok(current + 1)
+        }
+    }
+
+    #[test]
+    fn test_stop_signal() {
+        crate::test_helpers::init_test_logging();
+
+        let (sender, receiver) = new_stop_signal::<TestWorker>();
+        assert!(!receiver.is_stop_signaled());
+
+        sender.signal_stop();
+        assert!(receiver.is_stop_signaled());
+    }
+
+    #[test]
+    fn test_stop_signal_drop() {
+        crate::test_helpers::init_test_logging();
+
+        let (sender, receiver) = new_stop_signal::<TestWorker>();
+        assert!(!receiver.is_stop_signaled());
+
+        drop(sender);
+        assert!(receiver.is_stop_signaled());
+    }
+
+    #[test]
+    fn test_running_output_channel() {
+        crate::test_helpers::init_test_logging();
+
+        let (sender, receiver) = new_running_output_channel::<TestWorker>(2);
+
+        assert!(sender.send(1).is_ok());
+        assert!(sender.send(2).is_ok());
+
+        assert_eq!(receiver.recv(), Some(1));
+        assert_eq!(receiver.recv(), Some(2));
+    }
+
+    #[test]
+    fn test_running_output_channel_full() {
+        crate::test_helpers::init_test_logging();
+
+        let (sender, receiver) = new_running_output_channel::<TestWorker>(1);
+
+        assert!(sender.send(1).is_ok());
+        assert!(sender.try_send(2).is_err());
+
+        assert_eq!(receiver.recv(), Some(1));
+    }
+
+    #[test]
+    fn test_final_output_channel() {
+        crate::test_helpers::init_test_logging();
+
+        let (sender, receiver) = new_final_output_channel::<TestWorker>();
+
+        sender.send(Ok(42)).unwrap();
+        match receiver.recv().unwrap() {
+            Ok(val) => assert_eq!(val, 42),
+            Err(e) => panic!("Expected Ok(42), got Err: {}", e),
+        }
+    }
+
+    #[test]
+    fn test_complete_worker_lifecycle() {
+        crate::test_helpers::init_test_logging();
+
+        let init = TestWorkerInit {
+            count_to: 5,
+            delay_ms: 100,
+        };
+
+        let (_stop_sender, running_receiver, final_receiver) = start_thread_worker(init);
+
+        let mut received_outputs = Vec::new();
+        let mut done = false;
+        while let Some(output) = running_receiver.recv() {
+            assert!(!done, "received more outputs than expected!: {output}");
+            received_outputs.push(output);
+            if received_outputs.len() == 5 {
+                done = true;
+            }
+        }
+
+        let final_result = final_receiver.recv().unwrap();
+        assert_eq!(final_result.unwrap(), 6);
+        assert_eq!(received_outputs, vec![1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_worker_early_stop() {
+        crate::test_helpers::init_test_logging();
+
+        let init = TestWorkerInit {
+            count_to: 100,
+            delay_ms: 10,
+        };
+
+        let (stop_sender, _running_receiver, final_receiver) = start_thread_worker(init);
+
+        // Let it run for a bit
+        thread::sleep(Duration::from_millis(50));
+
+        // Stop it
+        stop_sender.signal_stop();
+
+        let final_result = final_receiver.recv().unwrap().unwrap();
+        assert!(final_result > 0 && final_result < 100);
+    }
+
+    // Test worker that fails during initialization
+    struct FailingInitWorker;
+
+    impl ThreadWorkerInit for FailingInitWorker {
+        type Work = TestWorker;
+        type RunningOutput = u32;
+
+        fn running_output_channel_bound(&self) -> usize {
+            1
+        }
+
+        fn init(
+            self,
+            _running_output: RunningOutputSender<Self::RunningOutput>,
+        ) -> Result<Self::Work> {
+            anyhow::bail!("Initialization failed")
+        }
+    }
+
+    #[test]
+    fn test_worker_init_failure() {
+        crate::test_helpers::init_test_logging();
+
+        let init = FailingInitWorker;
+        let (_stop_sender, _running_receiver, final_receiver) = start_thread_worker(init);
+
+        let result = final_receiver.recv().unwrap();
+        assert!(result.is_err());
+    }
+}
