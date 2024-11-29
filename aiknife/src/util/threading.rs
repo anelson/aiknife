@@ -26,6 +26,7 @@
 
 use anyhow::Result;
 use crossbeam::channel::{bounded, Receiver, Sender};
+use std::panic::AssertUnwindSafe;
 use std::thread;
 use tracing::*;
 
@@ -308,7 +309,7 @@ fn new_final_output_channel<T: ThreadWorker>(
 }
 
 #[derive(Debug)]
-pub(crate) struct FinalOutputSender<T> {
+struct FinalOutputSender<T> {
     sender: Sender<Result<T>>,
     worker: &'static str,
 }
@@ -343,7 +344,7 @@ where
 }
 
 #[derive(Debug)]
-pub(crate) struct FinalOutputReceiver<T> {
+struct FinalOutputReceiver<T> {
     receiver: Receiver<Result<T>>,
     worker: &'static str,
 }
@@ -354,7 +355,7 @@ impl<T> FinalOutputReceiver<T> {
     /// This will block until the output is available.
     ///
     /// If the sender has been dropped without sending output, this will return None.
-    pub(crate) fn recv(self) -> Option<Result<T>> {
+    fn recv(self) -> Option<Result<T>> {
         match self.receiver.recv() {
             Ok(output) => Some(output),
             Err(crossbeam::channel::RecvError) => {
@@ -366,22 +367,111 @@ impl<T> FinalOutputReceiver<T> {
             }
         }
     }
+}
 
-    /// Try to receive the final output from the worker without blocking.
+/// A handle to a thread worker, by which it is possible to get the final output from the worker
+/// and also to join the worker thread and thereby detect potential panics
+#[derive(Debug)]
+pub(crate) struct ThreadWorkerHandle<T> {
+    final_output: FinalOutputReceiver<T>,
+    join_handle: thread::JoinHandle<()>,
+}
+
+impl<T> ThreadWorkerHandle<T> {
+    /// Create a new thread worker handle from the final output receiver and the join handle.
+    pub(crate) fn new(
+        final_output: FinalOutputReceiver<T>,
+        join_handle: thread::JoinHandle<()>,
+    ) -> Self {
+        Self {
+            final_output,
+            join_handle,
+        }
+    }
+
+    /// Check if the thread worker is finished.
     ///
-    /// Returns None if no output is available or if the sender was dropped.
-    pub(crate) fn try_recv(self) -> Option<Result<T>> {
-        match self.receiver.try_recv() {
-            Ok(output) => Some(output),
-            Err(crossbeam::channel::TryRecvError::Empty) => None,
-            Err(crossbeam::channel::TryRecvError::Disconnected) => {
-                debug!(
-                    worker = self.worker,
-                    "Final output sender was dropped without sending output"
-                );
-                None
+    /// If this is `true`, then `join` is guaranteed to return immediately without blocking.
+    pub(crate) fn is_finished(&self) -> bool {
+        self.join_handle.is_finished()
+    }
+
+    /// Wait for the worker to complete and return the final output.
+    ///
+    /// # Notes
+    ///
+    /// If the thread panics, there is a special case here.  Regardless of whether or not a final
+    /// output was written to the final output channel, the panic will be propagated to the caller.
+    /// This reflects the seriousness of a panic in a worker thread and ensures that bugs which
+    /// cause threads to panic are not silently ignored.
+    pub(crate) fn join(self) -> Result<T> {
+        // Make sure that the thread has completed before we try to get the final output
+        if let Err(e) = self.join_handle.join() {
+            error!(worker = self.final_output.worker, "Worker thread panicked");
+            std::panic::resume_unwind(e);
+        }
+
+        // Now that the thread has completed, we can get the final output
+        // Note that at this point, we know that the thread did not panic.  The body of the thread
+        // is in this module in `start_thread_worker`, and we can clearly see that there is no way
+        // that this thread can return without writing *something* to the final output channel.
+        // Thus, we are certain that there will be output here, and if there isn't it's due to some
+        // very fundamental bug somewhere.
+        self.final_output
+            .recv()
+            .expect("BUG: Worker thread did not produce final output")
+    }
+}
+
+/// A receiver for the case when a thread worker produces some fallible running output (meaning
+/// wrappedin `Result`) and the final output is `Result<()>`.
+///
+/// This struct presents a convenience whereby the running output channel is joined with the thread
+/// handle, such that once the running output channel is empty (or the sender dropped), the final
+/// channel is queried.  If the final output is `Ok`, that response is translated into a `None`
+/// value signalling that there will be no more output, while if it is an `Err` then that error is
+/// returned.
+#[derive(Debug)]
+pub(crate) struct CombinedOutputReceiver<T> {
+    running_output: RunningOutputReceiver<Result<T>>,
+    thread_worker_handle: Option<ThreadWorkerHandle<()>>,
+}
+
+impl<T> CombinedOutputReceiver<T> {
+    /// Join together the running output and final output channels for a thread worker into a
+    /// single unified channel.
+    pub(crate) fn join(
+        running_output: RunningOutputReceiver<Result<T>>,
+        thread_worker_handle: ThreadWorkerHandle<()>,
+    ) -> Self {
+        Self {
+            running_output,
+            thread_worker_handle: Some(thread_worker_handle),
+        }
+    }
+
+    pub(crate) fn recv(&mut self) -> Option<Result<T>> {
+        if let Some(output) = self.running_output.recv() {
+            return Some(output);
+        }
+
+        if let Some(thread_worker_handle) = self.thread_worker_handle.take() {
+            match thread_worker_handle.join() {
+                Ok(()) => return None,
+                Err(e) => return Some(Err(e)),
             }
         }
+
+        // If both channels are empty, then we're done
+        None
+    }
+}
+
+impl<T> Iterator for CombinedOutputReceiver<T> {
+    type Item = Result<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.recv()
     }
 }
 
@@ -436,15 +526,16 @@ pub(crate) fn start_thread_worker<T: ThreadWorker>(
 ) -> (
     StopSignalSender,
     RunningOutputReceiver<T::RunningOutput>,
-    FinalOutputReceiver<T::FinalOutput>,
+    ThreadWorkerHandle<T::FinalOutput>,
 ) {
+    let worker_name = worker.name();
     let (stop_sender, stop_receiver) = new_stop_signal::<T>(worker.name());
     let (running_output_sender, running_output_receiver) =
         new_running_output_channel::<T>(worker.running_output_channel_bound(), worker.name());
     let (final_output_sender, final_output_receiver) = new_final_output_channel::<T>(worker.name());
 
     let current_span = Span::current();
-    let _handle = thread::spawn(move || {
+    let thread_func = move || {
         // Propagate the span from the caller into this thread too
         let span = debug_span!(parent: &current_span, "thread_worker", worker = worker.name());
         let _guard = span.enter();
@@ -462,9 +553,23 @@ pub(crate) fn start_thread_worker<T: ThreadWorker>(
         }
 
         debug!("Worker thread exiting");
-    });
+    };
 
-    (stop_sender, running_output_receiver, final_output_receiver)
+    // Spawn a new thread for this worker
+    // NOTE: the `expect` means we will panic if `spawn` fails.  In fact this is the behavior of
+    // `std::thread::spawn` as well, you just may not have been aware of it.  If thread spawning
+    // is failling the system is in a very bad state anyway, so getting upset over a panic is
+    // likely to be the least of your worries.
+    let join_handle = thread::Builder::new()
+        .name(format!("worker-{worker_name}"))
+        .spawn(thread_func)
+        .expect("Failed to spawn worker thread");
+
+    (
+        stop_sender,
+        running_output_receiver,
+        ThreadWorkerHandle::new(final_output_receiver, join_handle),
+    )
 }
 
 /// A variation on [`start_thread_worker`] that takes a closure as the worker instead of an
@@ -478,7 +583,7 @@ pub(crate) fn start_func_as_thread_worker<RunningOutput, FinalOutput, Func>(
 ) -> (
     StopSignalSender,
     RunningOutputReceiver<RunningOutput>,
-    FinalOutputReceiver<FinalOutput>,
+    ThreadWorkerHandle<FinalOutput>,
 )
 where
     RunningOutput: Send + 'static,
@@ -646,7 +751,7 @@ mod test {
             delay_ms: 100,
         };
 
-        let (_stop_sender, running_receiver, final_receiver) = start_thread_worker(worker);
+        let (_stop_sender, running_receiver, thread_worker_handle) = start_thread_worker(worker);
 
         let mut received_outputs = Vec::new();
         let mut done = false;
@@ -658,8 +763,8 @@ mod test {
             }
         }
 
-        let final_result = final_receiver.recv().unwrap();
-        assert_eq!(final_result.unwrap(), 6);
+        let final_result = thread_worker_handle.join().unwrap();
+        assert_eq!(final_result, 6);
         assert_eq!(received_outputs, vec![1, 2, 3, 4, 5]);
     }
 
@@ -672,7 +777,7 @@ mod test {
             delay_ms: 10,
         };
 
-        let (stop_sender, _running_receiver, final_receiver) = start_thread_worker(worker);
+        let (stop_sender, _running_receiver, thread_worker_handle) = start_thread_worker(worker);
 
         // Let it run for a bit
         thread::sleep(Duration::from_millis(50));
@@ -680,7 +785,7 @@ mod test {
         // Stop it
         stop_sender.signal_stop();
 
-        let final_result = final_receiver.recv().unwrap().unwrap();
+        let final_result = thread_worker_handle.join().unwrap();
         assert!(final_result > 0 && final_result < 100);
     }
 
@@ -713,9 +818,9 @@ mod test {
         crate::test_helpers::init_test_logging();
 
         let init = FailingInitWorker;
-        let (_stop_sender, _running_receiver, final_receiver) = start_thread_worker(init);
+        let (_stop_sender, _running_receiver, thread_worker_handle) = start_thread_worker(init);
 
-        let result = final_receiver.recv().unwrap();
+        let result = thread_worker_handle.join();
         assert!(result.is_err());
     }
 
@@ -723,7 +828,7 @@ mod test {
     fn test_func_worker_basic() {
         crate::test_helpers::init_test_logging();
 
-        let (_stop_sender, running_receiver, final_receiver) =
+        let (_stop_sender, running_receiver, thread_worker_handle) =
             start_func_as_thread_worker("counter", 5, |stop_signal, running_output| {
                 let mut count = 0;
                 while count < 5 {
@@ -743,14 +848,14 @@ mod test {
         }
 
         assert_eq!(received, vec![1, 2, 3, 4, 5]);
-        assert_eq!(final_receiver.recv().unwrap().unwrap(), 5);
+        assert_eq!(thread_worker_handle.join().unwrap(), 5);
     }
 
     #[test]
     fn test_func_worker_early_stop() {
         crate::test_helpers::init_test_logging();
 
-        let (stop_sender, _running_receiver, final_receiver) =
+        let (stop_sender, _running_receiver, thread_worker_handle) =
             start_func_as_thread_worker("infinite_counter", 5, |stop_signal, running_output| {
                 let mut count = 0;
                 loop {
@@ -767,7 +872,7 @@ mod test {
         thread::sleep(Duration::from_millis(50));
         stop_sender.signal_stop();
 
-        let final_count = final_receiver.recv().unwrap().unwrap();
+        let final_count = thread_worker_handle.join().unwrap();
         assert!(
             final_count > 0,
             "Worker should have counted up before stopping"
@@ -782,7 +887,7 @@ mod test {
     fn test_func_worker_error() {
         crate::test_helpers::init_test_logging();
 
-        let (_stop_sender, running_receiver, final_receiver) =
+        let (_stop_sender, running_receiver, thread_worker_handle) =
             start_func_as_thread_worker("failing_counter", 5, |stop_signal, running_output| {
                 for i in 1..=3 {
                     if stop_signal.is_stop_signaled() {
@@ -800,14 +905,14 @@ mod test {
         }
 
         assert_eq!(received, vec![1, 2, 3]);
-        assert!(final_receiver.recv().unwrap().is_err());
+        assert!(thread_worker_handle.join().is_err());
     }
 
     #[test]
     fn test_func_worker_channel_bounds() {
         crate::test_helpers::init_test_logging();
 
-        let (_stop_sender, running_receiver, final_receiver) = start_func_as_thread_worker(
+        let (_stop_sender, running_receiver, thread_worker_handle) = start_func_as_thread_worker(
             "fast_counter",
             2, // Small channel bound
             |stop_signal, running_output| {
@@ -839,6 +944,266 @@ mod test {
 
         assert!(!received.is_empty(), "Should have received some values");
         assert!(received.len() <= 5, "Should not receive more than 5 values");
-        assert_eq!(final_receiver.recv().unwrap().unwrap(), 5);
+        assert_eq!(thread_worker_handle.join().unwrap(), 5);
+    }
+
+    #[test]
+    fn test_combined_output_receiver_success() {
+        crate::test_helpers::init_test_logging();
+
+        let (_stop_sender, running_receiver, thread_worker_handle) =
+            start_func_as_thread_worker("success_worker", 5, |stop_signal, running_output| {
+                for i in 1..=3 {
+                    if stop_signal.is_stop_signaled() {
+                        return Ok(());
+                    }
+                    let _ = running_output.send(Ok(i));
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Ok(())
+            });
+
+        let mut combined = CombinedOutputReceiver::join(running_receiver, thread_worker_handle);
+
+        // Test iterator implementation
+        let results: Vec<_> = combined.collect();
+        assert_eq!(results.len(), 3);
+        for (i, result) in results.iter().enumerate() {
+            match result {
+                Ok(val) => assert_eq!(*val, i as i32 + 1),
+                Err(_) => panic!("Expected Ok value at index {}", i),
+            }
+        }
+    }
+
+    #[test]
+    fn test_combined_output_receiver_error_in_running() {
+        crate::test_helpers::init_test_logging();
+
+        let (_stop_sender, running_receiver, thread_worker_handle) = start_func_as_thread_worker(
+            "error_in_running_worker",
+            5,
+            |stop_signal, running_output| {
+                for i in 1..=3 {
+                    if stop_signal.is_stop_signaled() {
+                        return Ok(());
+                    }
+                    let result = if i == 2 {
+                        Err(anyhow::anyhow!("Error at {}", i))
+                    } else {
+                        Ok(i)
+                    };
+                    let _ = running_output.send(result);
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Ok(())
+            },
+        );
+
+        let mut combined = CombinedOutputReceiver::join(running_receiver, thread_worker_handle);
+
+        // First value should be Ok(1)
+        match combined.recv() {
+            Some(Ok(1)) => (),
+            other => panic!("Expected Some(Ok(1)), got {:?}", other),
+        }
+
+        // Second value should be an error
+        match combined.recv() {
+            Some(Err(_)) => (),
+            other => panic!("Expected Some(Err(_)), got {:?}", other),
+        }
+
+        // Third value should be Ok(3)
+        match combined.recv() {
+            Some(Ok(3)) => (),
+            other => panic!("Expected Some(Ok(3)), got {:?}", other),
+        }
+
+        // Should end with None after successful completion
+        assert!(combined.recv().is_none());
+    }
+
+    #[test]
+    fn test_combined_output_receiver_error_in_final() {
+        crate::test_helpers::init_test_logging();
+
+        let (_stop_sender, running_receiver, thread_worker_handle) = start_func_as_thread_worker(
+            "error_in_final_worker",
+            5,
+            |stop_signal, running_output| {
+                for i in 1..=2 {
+                    if stop_signal.is_stop_signaled() {
+                        return Ok(());
+                    }
+                    let _ = running_output.send(Ok(i));
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(anyhow::anyhow!("Final error"))
+            },
+        );
+
+        let mut combined = CombinedOutputReceiver::join(running_receiver, thread_worker_handle);
+
+        // First value should be Ok(1)
+        match combined.recv() {
+            Some(Ok(1)) => (),
+            other => panic!("Expected Some(Ok(1)), got {:?}", other),
+        }
+
+        // Second value should be Ok(2)
+        match combined.recv() {
+            Some(Ok(2)) => (),
+            other => panic!("Expected Some(Ok(2)), got {:?}", other),
+        }
+
+        // Should end with the final error
+        match combined.recv() {
+            Some(Err(_)) => (),
+            other => panic!("Expected Some(Err(_)), got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_combined_output_receiver_early_stop() {
+        crate::test_helpers::init_test_logging();
+
+        let (stop_sender, running_receiver, thread_worker_handle) =
+            start_func_as_thread_worker("stopped_worker", 5, |stop_signal, running_output| {
+                for i in 1..=5 {
+                    if stop_signal.is_stop_signaled() {
+                        return Ok(());
+                    }
+                    let _ = running_output.send(Ok(i));
+                    thread::sleep(Duration::from_millis(50));
+                }
+                Ok(())
+            });
+
+        let mut combined = CombinedOutputReceiver::join(running_receiver, thread_worker_handle);
+
+        // First value should be Ok(1)
+        match combined.recv() {
+            Some(Ok(1)) => (),
+            other => panic!("Expected Some(Ok(1)), got {:?}", other),
+        }
+
+        // Stop the worker after first output
+        stop_sender.signal_stop();
+
+        // Should receive None after the worker stops
+        assert!(combined.recv().is_none());
+    }
+
+    // A worker that panics during execution
+    struct PanickingWorker {
+        panic_after: u32,
+    }
+
+    impl ThreadWorker for PanickingWorker {
+        type RunningOutput = u32;
+        type FinalOutput = u32;
+
+        fn name(&self) -> &'static str {
+            "panicking_worker"
+        }
+
+        fn running_output_channel_bound(&self) -> usize {
+            5
+        }
+
+        fn run(
+            self,
+            stop_signal: StopSignalReceiver,
+            running_output: RunningOutputSender<Self::RunningOutput>,
+        ) -> Result<Self::FinalOutput> {
+            let mut count = 0;
+            while count < self.panic_after {
+                if stop_signal.is_stop_signaled() {
+                    return Ok(count);
+                }
+                count += 1;
+                let _ = running_output.send(count);
+                thread::sleep(Duration::from_millis(10));
+            }
+            panic!("Worker panicked after {} iterations", count);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Worker panicked after 3 iterations")]
+    fn test_worker_panic() {
+        crate::test_helpers::init_test_logging();
+
+        let worker = PanickingWorker { panic_after: 3 };
+        let (_stop_sender, running_receiver, thread_worker_handle) = start_thread_worker(worker);
+
+        // Collect outputs until panic
+        let mut received = Vec::new();
+        while let Some(output) = running_receiver.recv() {
+            received.push(output);
+        }
+
+        // This should panic with our custom message
+        thread_worker_handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_worker_panic_output_handling() {
+        crate::test_helpers::init_test_logging();
+
+        let worker = PanickingWorker { panic_after: 3 };
+        let (_stop_sender, running_receiver, thread_worker_handle) = start_thread_worker(worker);
+
+        // We should receive all outputs sent before the panic
+        let mut received = Vec::new();
+        while let Some(output) = running_receiver.recv() {
+            received.push(output);
+        }
+
+        assert_eq!(received, vec![1, 2, 3]);
+
+        // The join should result in a panic that we can catch
+        let result =
+            std::panic::catch_unwind(AssertUnwindSafe(|| thread_worker_handle.join().unwrap()));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_combined_output_receiver_panic() {
+        crate::test_helpers::init_test_logging();
+
+        let (_stop_sender, running_receiver, thread_worker_handle) =
+            start_func_as_thread_worker("panicking_worker", 5, |stop_signal, running_output| {
+                for i in 1..=3 {
+                    if stop_signal.is_stop_signaled() {
+                        return Ok(());
+                    }
+                    let _ = running_output.send(Ok(i));
+                    if i == 2 {
+                        panic!("Planned panic after second output");
+                    }
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Ok(())
+            });
+
+        let mut combined = CombinedOutputReceiver::join(running_receiver, thread_worker_handle);
+
+        // First value should be Ok(1)
+        match combined.recv() {
+            Some(Ok(1)) => (),
+            other => panic!("Expected Some(Ok(1)), got {:?}", other),
+        }
+
+        // Second value should be Ok(2)
+        match combined.recv() {
+            Some(Ok(2)) => (),
+            other => panic!("Expected Some(Ok(2)), got {:?}", other),
+        }
+
+        // The next recv should result in a panic that we can catch
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| combined.recv()));
+        assert!(result.is_err());
     }
 }

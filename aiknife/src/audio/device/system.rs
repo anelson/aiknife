@@ -3,7 +3,10 @@
 //!
 //! TODO: Handle changes to available system audio devices on the fly (ie, AirPods connecting to a
 //! Mac).
-use crate::audio::{self as audio, stream, AudioInputChunk};
+use crate::{
+    audio::{self as audio, stream, AudioInputChunk},
+    util::threading,
+};
 use anyhow::{Context, Result};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use either::Either;
@@ -375,11 +378,7 @@ impl super::AudioInput for AudioInputDevice {
                         .collect::<Vec<_>>();
                     suitable_configs
                         .first()
-                        .map(|range| {
-                            cpal::SupportedStreamConfig::from(
-                                (*range).clone().with_max_sample_rate(),
-                            )
-                        })
+                        .map(|range| (*(*range)).with_max_sample_rate())
                         .or_else(|| Some(self.default_config.clone()))
                         .ok_or_else(|| anyhow::anyhow!("No suitable sample rate found"))?
                 }
@@ -387,6 +386,24 @@ impl super::AudioInput for AudioInputDevice {
         };
 
         debug!(?stream_config, "Selected stream config");
+
+        let channel_count = stream_config.channels() as usize;
+
+        // If the channel count is more than 1, merge the channels unless an explicit
+        // channel has been specified
+        // TODO: implement
+        if config.channel.is_some() {
+            anyhow::bail!(
+                "Choosing a specific channel from multi-channel audio is not yet implemented"
+            );
+        }
+
+        if channel_count > 1 {
+            warn!(
+                channel_count,
+                "In multi-channel audio, only the first channel is used currently"
+            );
+        }
 
         let device_name = self.device.device_name.clone();
         let sample_rate = NonZeroU32::new(stream_config.sample_rate().0).unwrap();
@@ -405,38 +422,20 @@ impl super::AudioInput for AudioInputDevice {
             cpal::SupportedBufferSize::Range { max, .. } => max_buffered_samples / *max as usize,
         };
 
-        debug!(bound, ?config.max_buffered_duration, buffer_size = ?stream_config.buffer_size(), "Creating crossbeam channel");
-        let (chunk_sender, chunk_receiver) = crossbeam::channel::bounded(bound);
+        debug!(bound,
+            ?config.max_buffered_duration,
+            buffer_size = ?stream_config.buffer_size(),
+            "Ready to start a worker thread to contain the CPAL stream");
 
-        let guard = cpal_stream_host(
-            stream_config,
-            config.clone(),
-            self.device.clone(),
-            chunk_sender,
-        )?;
+        let (stop_signal_sender, chunks_receiver) =
+            cpal_stream_host(stream_config, config.clone(), self.device.clone(), bound)?;
 
-        let stream = stream::AudioInputCrossbeamChannelReceiver::new(
+        let stream = stream::AudioInputThreadingChunksReceiver::new(
             device_name,
             sample_rate,
-            chunk_receiver,
+            chunks_receiver,
         );
-        Ok((Box::new(guard), Box::new(stream)))
-    }
-}
-
-/// See [`cpal_stream_host`] for details.
-#[derive(Clone, Debug)]
-struct CpalStreamGuard(Arc<crossbeam::channel::Sender<()>>);
-
-impl Drop for CpalStreamGuard {
-    fn drop(&mut self) {
-        <Self as super::AudioStreamGuard>::stop_stream(self);
-    }
-}
-
-impl super::AudioStreamGuard for CpalStreamGuard {
-    fn stop_stream(&mut self) {
-        let _ = self.0.try_send(());
+        Ok((Box::new(Some(stop_signal_sender)), Box::new(stream)))
     }
 }
 
@@ -458,44 +457,24 @@ fn cpal_stream_host(
     stream_config: cpal::SupportedStreamConfig,
     config: Arc<audio::AudioInputConfig>,
     device: AudioDevice,
-    chunk_sender: crossbeam::channel::Sender<Result<AudioInputChunk>>,
-) -> Result<CpalStreamGuard> {
-    /// As if this wasn't mind-bending enough, a nested function that is called from the spawned
-    /// cpal::Stream thread, to actually create the stream.  This is a convenience, which let's use
-    /// use `?` sigils for error handling, so that the actual thread host only has to check for and
-    /// report errors in one place, when it calls this function.
-    #[instrument(skip_all)]
-    fn create_cpal_stream(
-        stream_config: cpal::SupportedStreamConfig,
-        config: Arc<audio::AudioInputConfig>,
-        device: AudioDevice,
-        chunk_sender: crossbeam::channel::Sender<Result<AudioInputChunk>>,
-    ) -> Result<cpal::Stream> {
-        let channel_count = stream_config.channels() as usize;
+    chunk_channel_bound: usize,
+) -> Result<(
+    threading::StopSignalSender,
+    threading::CombinedOutputReceiver<AudioInputChunk>,
+)> {
+    let (stop_signal_sender, running_receiver, final_receiver) =
+        threading::start_func_as_thread_worker(
+            "cpal_stream_host_thread",
+            chunk_channel_bound,
+            move |stop_signal_receiver, chunk_sender| {
+                let channel_count = stream_config.channels() as usize;
+                let mut timestamp = Duration::default();
+                let mut samples: u64 = 0;
 
-        // If the channel count is more than 1, merge the channels unless an explicit
-        // channel has been specified
-        // TODO: implement
-        if config.channel.is_some() {
-            anyhow::bail!(
-                "Choosing a specific channel from multi-channel audio is not yet implemented"
-            );
-        }
+                let data_callback_sender = chunk_sender.clone();
+                let error_callback_sender = chunk_sender;
 
-        if channel_count > 1 {
-            warn!(
-                channel_count,
-                "In multi-channel audio, only the first channel is used currently"
-            );
-        }
-
-        let mut timestamp = Duration::default();
-        let mut samples: u64 = 0;
-
-        let data_callback_sender = chunk_sender.clone();
-        let error_callback_sender = chunk_sender.clone();
-
-        let cpal_stream = device.inner.build_input_stream(
+                let cpal_stream = device.inner.build_input_stream(
                 &stream_config.config(),
                 move |pcm: &[f32], _: &cpal::InputCallbackInfo| {
                     let pcm = if channel_count == 1 {
@@ -525,16 +504,8 @@ fn cpal_stream_host(
                         // represent either a chunk of samples or information about dropped
                         // samples.
                         if let Err(e) = data_callback_sender.try_send(Ok(chunk)) {
-                            match e {
-                                crossbeam::channel::TrySendError::Full(Ok(chunk)) => {
+                            if let crossbeam::channel::TrySendError::Full(Ok(chunk)) = e {
                                     warn!(samples = chunk.samples.len(), ?chunk.timestamp, ?chunk.duration, "Audio channel is full; dropping all of the samples in this chunk");
-                                }
-                                crossbeam::channel::TrySendError::Full(Err(_)) => {
-                                    unreachable!();
-                                }
-                                crossbeam::channel::TrySendError::Disconnected(_) => {
-                                    debug!("Failed to send audio chunk; receiver has been dropped");
-                                }
                             }
                         }
                     }
@@ -545,98 +516,32 @@ fn cpal_stream_host(
                     // also bad, but in this case something's already broken so I think it's
                     // probably better to block but make sure downstream sees the error, rather
                     // than hiding it.
-                    let _ = error_callback_sender.send(Err(err).context("Error in audio stream".to_string()));
+                    let _ = error_callback_sender.send(Err(err).context("Error in audio stream"));
                 },
                 None,
             )?;
 
-        Ok(cpal_stream)
-    }
+                debug!("Starting audio stream");
+                cpal_stream.play().context("Error starting audio stream")?;
 
-    // Use a zero-length channel to signal the stream thread to stop.
-    let (abort_sender, abort_receiver) = crossbeam::channel::bounded(0);
+                // Wait for the abort signal.  This might seem a bit odd, but CPAL has already launched its
+                // own separate thread that will process the audio from the device and invoke our data
+                // callback, and the other end of the channel is held by whoever initiated this stream in
+                // the first place, so the only purpose of this thread now is to wait until the stream is
+                // stopped, as indicated by a message being sent on this abort receiver or alternatively by
+                // abort sender being dropped, at which point we know we can exit this thread and allow the
+                // `cpal::Stream` struct to go out of scope and be dropped.
+                stop_signal_receiver.wait_for_stop();
 
-    // And another one to get the result, success or failure, of the operation that actuall creates
-    // the stream and starts it playing.  If that fails we want to propagate that error back to the
-    // caller of this function rather than sticking it in the chunks channel which will be more
-    // awkward to handle, especially in tests.
-    let (init_result_sender, init_result_receiver) = crossbeam::channel::bounded(0);
+                debug!("Audio stream thread exiting");
+                Result::<()>::Ok(())
+            },
+        );
 
-    let current_span = Span::current();
-
-    // Create the cpal stream for this device, using callbacks to push the audio data into the
-    // crossbeam channel.
-    //
-    // NOTE: this callback is performance critical, as any latency here is going to be imparted
-    // into the audio sampling.  So we just do some very minimal processing here, stripping out
-    // any extraneous channels, and copy the data into a new vec which we then send to
-    // crossbeam.  All of the logic of buffering and whatever other post-processing will have
-    // to be done on the receive side.
-    let _thread = std::thread::spawn(move || {
-        // Propagate the span from the caller into this thread too
-        let span = debug_span!(parent: &current_span, "cpal_stream_host_thread");
-        let _guard = span.enter();
-
-        debug!("Starting audio stream thread");
-
-        let cpal_stream =
-            match create_cpal_stream(stream_config, config, device, chunk_sender.clone()) {
-                Ok(stream) => stream,
-                Err(e) => {
-                    error!(%e, "Error creating audio stream");
-                    let _ = init_result_sender.send(Err(e).context("Error creating audio stream"));
-                    anyhow::bail!("Error creating audio stream");
-                }
-            };
-
-        debug!("Starting audio stream");
-        if let Err(e) = cpal_stream.play() {
-            error!(%e, "Error starting audio stream");
-            let _ = init_result_sender.send(Err(e).context("Error in audio stream"));
-
-            // No one will see this returned error from the thread, but when this scope ends the
-            // channel sender for audio chunks will go out of scope, which will cause the receiver
-            // to fail when it tries to read from an empty channel.
-            anyhow::bail!("Error starting audio stream");
-        }
-
-        // Else, stream was created and started playing so signal back to the main thread that this
-        // worked, and then wait around for an abort signal
-        let _ = init_result_sender.send(Ok(()));
-
-        // Wait for the abort signal.  This might seem a bit odd, but CPAL has already launched its
-        // own separate thread that will process the audio from the device and invoke our data
-        // callback, and the other end of the channel is held by whoever initiated this stream in
-        // the first place, so the only purpose of this thread now is to wait until the stream is
-        // stopped, as indicated by a message being sent on this abort receiver or alternatively by
-        // abort sender being dropped, at which point we know we can exit this thread and allow the
-        // `cpal::Stream` struct to go out of scope and be dropped.
-        match abort_receiver.recv() {
-            Ok(()) => {
-                debug!("Received abort signal; stopping audio stream");
-
-                // This doesn't even need to be here; we'll be dropping the whole stream soon.
-                cpal_stream.pause().ok();
-            }
-            Err(e) => {
-                debug!(%e, "Error receiving abort signal; assuming that the stream guard struct was dropped and that this constitutes an abort signal");
-            }
-        }
-
-        debug!("Audio stream thread exiting");
-        Result::<()>::Ok(())
-    });
-
-    // Wait for the stream to be created and started, or for an error to occur
-    // If the recv operation itself fails, it means a bug in the thread code since there is not
-    // supposed to be any path out of that stream initialization code that doesn't send a message
-    let init_result = init_result_receiver
-        .recv()
-        .context("BUG: stream worker thread init code failed in an unexpected way")?;
-
-    init_result?;
-
-    return Ok(CpalStreamGuard(Arc::new(abort_sender)));
+    Ok((
+        stop_signal_sender,
+        threading::CombinedOutputReceiver::join(running_receiver, final_receiver),
+    ))
 }
 
 #[derive(Clone, Debug)]

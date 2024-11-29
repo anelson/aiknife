@@ -2,12 +2,18 @@
 //!
 //! Streams represent either audio coming in for processing, or being produced as output.  To the
 //! extent possible they are abstracted away from the underlying audio device.
+use crate::util::threading;
 use anyhow::Result;
 use std::fmt::Debug;
 use std::num::{NonZeroU32, NonZeroUsize};
 use std::path::PathBuf;
 use std::time::Duration;
 
+/// A guard object that must be kept alive for the duration of the stream.
+///
+/// When a caller is no longer using a stream, the caller should call [`Self::stop_stream`] to
+/// explicitly stop the stream worker thread.  The stream and its worker will also be stopped if
+/// this guard is simply dropped.
 pub trait AudioStreamGuard: Debug + Send + 'static {
     /// Explicitly stop the stream.  This is a no-op if the stream is already stopped.
     /// The stream is also stopped once this guard is dropped.
@@ -33,31 +39,41 @@ pub trait AudioInputStream:
     fn sample_rate(&self) -> NonZeroU32;
 }
 
-/// Implementation of [`AudioInputStream`] that gets the audio samples from a
-/// [`crossbeam::channel::bounded::Receiver`], the sending
-/// side of which is presumably reading it from a device and pushing it onto the channel.
-#[derive(Debug)]
-pub(crate) struct AudioInputCrossbeamChannelReceiver {
-    device_name: String,
-    sample_rate: NonZeroU32,
-    channel: crossbeam::channel::Receiver<Result<AudioInputChunk>>,
-}
-
-impl AudioInputCrossbeamChannelReceiver {
-    pub fn new(
-        device_name: String,
-        sample_rate: NonZeroU32,
-        channel: crossbeam::channel::Receiver<Result<AudioInputChunk>>,
-    ) -> Self {
-        Self {
-            device_name,
-            sample_rate,
-            channel,
+/// A stream guard struct would just be a wrapper around `Option<threading::StopSignalSender>`.
+/// anyway.  So we just implement the trait for that type directly.
+impl AudioStreamGuard for Option<threading::StopSignalSender> {
+    fn stop_stream(&mut self) {
+        if let Some(sender) = self.take() {
+            sender.signal_stop();
         }
     }
 }
 
-impl AudioInputStream for AudioInputCrossbeamChannelReceiver {
+/// Implementation of [`AudioInputStream`] that gets the audio samples from a
+/// [`threading::CombinedOutputReceiver`], the sending
+/// side of which is presumably reading it from a device and pushing it onto the channel.
+#[derive(Debug)]
+pub(crate) struct AudioInputThreadingChunksReceiver {
+    device_name: String,
+    sample_rate: NonZeroU32,
+    receiver: threading::CombinedOutputReceiver<AudioInputChunk>,
+}
+
+impl AudioInputThreadingChunksReceiver {
+    pub fn new(
+        device_name: String,
+        sample_rate: NonZeroU32,
+        receiver: threading::CombinedOutputReceiver<AudioInputChunk>,
+    ) -> Self {
+        Self {
+            device_name,
+            sample_rate,
+            receiver,
+        }
+    }
+}
+
+impl AudioInputStream for AudioInputThreadingChunksReceiver {
     fn device_name(&self) -> &str {
         &self.device_name
     }
@@ -67,13 +83,11 @@ impl AudioInputStream for AudioInputCrossbeamChannelReceiver {
     }
 }
 
-impl Iterator for AudioInputCrossbeamChannelReceiver {
+impl Iterator for AudioInputThreadingChunksReceiver {
     type Item = Result<AudioInputChunk>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // `recv` is fallible only if the senders are all dropped, meaning there will be no further
-        // chunks forthcoming
-        self.channel.recv().ok()
+        self.receiver.next()
     }
 }
 

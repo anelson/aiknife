@@ -1,5 +1,5 @@
-pub mod chat;
 pub mod audio;
+pub mod chat;
 mod error;
 mod tokenize;
 mod util;
@@ -23,11 +23,10 @@ pub mod test_helpers {
 
             tracing_subscriber::fmt()
                 .with_env_filter(filter)
-                .with_span_events(FmtSpan::CLOSE)
+                .with_span_events(FmtSpan::CLOSE | FmtSpan::NEW)
                 .with_test_writer()
                 .try_init()
                 .ok();
         });
     }
 }
-
