@@ -66,30 +66,31 @@ impl device::AudioInput for FileAudioDevice {
             .context("unsupported audio format")?;
 
         let format = probed.format;
-
-        // Find all audio tracks
-        let audio_tracks: Vec<_> = format
+        let track_id = format
             .tracks()
             .iter()
-            .filter(|t| t.codec_params.codec != CODEC_TYPE_NULL)
-            .collect();
+            .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+            .context("no audio track found")?
+            .id;
 
-        // Verify we have exactly one audio track
-        let track = match audio_tracks.len() {
-            0 => anyhow::bail!("no audio tracks found in file"),
-            1 => audio_tracks[0],
-            n => anyhow::bail!("file contains {n} audio tracks - only files with a single audio track are supported"),
-        };
-
-        let track_id = track.id;
-
-        // Create a decoder for the track
         let decoder = symphonia::default::get_codecs()
-            .make(&track.codec_params, &decoder_opts)
+            .make(
+                &format
+                    .tracks()
+                    .iter()
+                    .find(|t| t.id == track_id)
+                    .unwrap()
+                    .codec_params,
+                &decoder_opts,
+            )
             .context("unsupported audio codec")?;
 
         let device_name = self.device_name.clone();
-        let sample_rate = track
+        let sample_rate = format
+            .tracks()
+            .iter()
+            .find(|t| t.id == track_id)
+            .unwrap()
             .codec_params
             .sample_rate
             .ok_or_else(|| anyhow::anyhow!("unknown sample rate"))?;
@@ -105,7 +106,14 @@ impl device::AudioInput for FileAudioDevice {
             }
         }
 
-        if let Some(n_frames) = track.codec_params.n_frames {
+        if let Some(n_frames) = format
+            .tracks()
+            .iter()
+            .find(|t| t.id == track_id)
+            .unwrap()
+            .codec_params
+            .n_frames
+        {
             debug!("Audio file contains {} frames", n_frames);
         }
 
@@ -319,6 +327,135 @@ mod tests {
             collected_samples < total_samples,
             "Expected fewer samples ({collected_samples}) than total samples ({total_samples}) due to early stop"
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_file_audio_device_decoding() -> Result<()> {
+        use symphonia::core::codecs::DecoderOptions;
+        use symphonia::core::formats::FormatOptions;
+        use symphonia::core::io::MediaSourceStream;
+        use symphonia::core::meta::MetadataOptions;
+        use symphonia::core::probe::Hint;
+
+        // Test both our test files
+        for test_file in [test_short_audio_file_path(), test_long_audio_file_path()] {
+            debug!("Testing file: {}", test_file.display());
+
+            // First read using our FileAudioDevice
+            let mut device = FileAudioDevice::new(&test_file)?;
+            let config = Arc::new(audio::AudioInputConfig::default());
+            let (_guard, stream) = device.start_stream(config)?;
+
+            // Collect all samples from our device
+            let mut our_samples = Vec::new();
+            for result in stream {
+                let chunk = result?;
+                our_samples.extend(chunk.samples);
+            }
+
+            // Now read using symphonia directly
+            let file = std::fs::File::open(&test_file)?;
+            let mss = MediaSourceStream::new(Box::new(file), Default::default());
+            let mut hint = Hint::new();
+            if let Some(extension) = test_file.extension().and_then(|e| e.to_str()) {
+                hint.with_extension(extension);
+            }
+
+            let format_opts = FormatOptions::default();
+            let metadata_opts = MetadataOptions::default();
+            let decoder_opts = DecoderOptions::default();
+
+            let probed = symphonia::default::get_probe()
+                .format(&hint, mss, &format_opts, &metadata_opts)
+                .context("unsupported audio format")?;
+
+            let mut format = probed.format;
+            let track_id = format
+                .tracks()
+                .iter()
+                .find(|t| t.codec_params.codec != CODEC_TYPE_NULL)
+                .context("no audio track found")?
+                .id;
+
+            let mut decoder = symphonia::default::get_codecs()
+                .make(
+                    &format
+                        .tracks()
+                        .iter()
+                        .find(|t| t.id == track_id)
+                        .unwrap()
+                        .codec_params,
+                    &decoder_opts,
+                )
+                .context("unsupported audio codec")?;
+
+            // Read all samples from symphonia directly
+            let mut reference_samples = Vec::new();
+            while let Ok(packet) = format.next_packet() {
+                if packet.track_id() != track_id {
+                    continue;
+                }
+
+                let decoded = decoder.decode(&packet)?;
+                let spec = *decoded.spec();
+                let mut sample_buf = SampleBuffer::<f32>::new(decoded.capacity() as u64, spec);
+                sample_buf.copy_interleaved_ref(decoded);
+
+                // Average channels the same way our device does
+                if spec.channels.count() > 1 {
+                    let channel_count = spec.channels.count();
+                    let samples = sample_buf.samples();
+                    reference_samples.extend(
+                        samples
+                            .chunks(channel_count)
+                            .map(|chunk| chunk.iter().sum::<f32>() / channel_count as f32),
+                    );
+                } else {
+                    reference_samples.extend(sample_buf.samples());
+                }
+            }
+
+            // Verify we got roughly the same number of samples
+            // Note: There might be small differences due to decoder padding/alignment
+            let sample_diff = (our_samples.len() as i64 - reference_samples.len() as i64).abs();
+            assert!(
+                sample_diff < 100,
+                "Sample count mismatch for {}: ours={}, reference={}, diff={}",
+                test_file.display(),
+                our_samples.len(),
+                reference_samples.len(),
+                sample_diff
+            );
+
+            // Compare sample values
+            // Note: We use a relatively large epsilon because:
+            // 1. Different decoders might use slightly different algorithms
+            // 2. Our channel averaging might introduce small differences
+            // 3. We're more interested in catching major decoding issues
+            let max_diff = our_samples
+                .iter()
+                .zip(reference_samples.iter())
+                .map(|(a, b)| (a - b).abs())
+                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .unwrap_or(0.0);
+
+            assert!(
+                max_diff < 0.1,
+                "Sample value mismatch for {}: max difference = {}",
+                test_file.display(),
+                max_diff
+            );
+
+            // Verify we have some non-zero samples (audio isn't silent)
+            let has_non_zero = our_samples.iter().any(|&s| s.abs() > 0.0001);
+            assert!(
+                has_non_zero,
+                "Audio appears to be completely silent: {}",
+                test_file.display()
+            );
+        }
 
         Ok(())
     }

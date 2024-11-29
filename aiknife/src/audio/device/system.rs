@@ -819,7 +819,7 @@ mod tests {
 
         // Read any remaining chunks from the stream
         let mut chunk_count = 1; // Count the first chunk we already got
-        while let Some(chunk_result) = stream.next() {
+        for chunk_result in stream {
             // Verify each chunk is Ok (no errors during shutdown)
             let chunk = chunk_result?;
             assert!(
