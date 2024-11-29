@@ -17,8 +17,8 @@ const DEFAULT_MODEL_SAMPLE_RATE: u32 = 16000;
 
 #[derive(Clone, Debug)]
 pub struct AudioInputConfig {
-    /// The audio device to use for audio acquisition
-    pub device: device::AudioInputDevice,
+    /// The source of the audio to operate on.
+    pub source: device::AudioSource,
 
     /// The audio channel (1-based) to use for audio acquisition.  If `None`,
     /// then if the audio device has multiple audio channels they will be merged into a single mono
@@ -55,13 +55,13 @@ pub struct AudioInputConfig {
     pub input_sample_rate: Option<NonZeroU32>,
 
     /// The sample rate that the model that will be consuming this audio requires.
-    pub model_sample_rate: NonZeroU32,  
+    pub model_sample_rate: NonZeroU32,
 }
 
 impl Default for AudioInputConfig {
     fn default() -> Self {
         Self {
-            device: AudioInputDevice::Default,
+            source: AudioSource::Default,
             channel: None,
             initial_buffer_duration: Duration::from_secs(1),
             buffer_duration: Duration::from_millis(200),

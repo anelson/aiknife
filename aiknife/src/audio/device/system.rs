@@ -239,7 +239,7 @@ impl AudioDevice {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct AudioInputDevice {
+pub struct AudioInputDevice {
     device: AudioDevice,
     default_config: cpal::SupportedStreamConfig,
     supported_configs: Vec<cpal::SupportedStreamConfigRange>,
@@ -248,7 +248,7 @@ pub(crate) struct AudioInputDevice {
 impl AudioInputDevice {
     /// Given the name of an audio input device that was presumably previously returned by
     /// [`list_devices`], try to find the device now and use it as an input device.
-    pub(crate) fn find_device_by_name(name: &str) -> Result<Self> {
+    pub fn find_device_by_name(name: &str) -> Result<Self> {
         if let Ok(device) =
             AudioDevice::find_device_by_name(name, DevicePredicate::Input)?.try_into_input_device()
         {
@@ -258,12 +258,12 @@ impl AudioInputDevice {
         }
     }
 
-    /// Find an audio input device that satisfies the given [`AudioInputDevice`] enum.
+    /// Find an audio input device that satisfies the given [`super::AudioSource`] enum.
     ///
     /// If the request cannot be satisfied, fails with a meaningful error.
-    pub(crate) fn find_device(device: super::AudioInputDevice) -> Result<Self> {
-        match device {
-            super::AudioInputDevice::Default => {
+    pub fn find_device(source: super::AudioSource) -> Result<Self> {
+        match source {
+            super::AudioSource::Default => {
                 let host = cpal::default_host();
                 let device = host
                     .default_input_device()
@@ -286,8 +286,8 @@ impl AudioInputDevice {
                     supported_configs,
                 })
             }
-            super::AudioInputDevice::Device(name) => Self::find_device_by_name(&name),
-            super::AudioInputDevice::File(_) => {
+            super::AudioSource::Device(name) => Self::find_device_by_name(&name),
+            super::AudioSource::File(_) => {
                 anyhow::bail!(
                     "BUG: File device should have been handled at a higher level of abstraction"
                 )
@@ -687,8 +687,7 @@ mod tests {
             return Ok(());
         };
 
-        let mut input_device =
-            AudioInputDevice::find_device(super::super::AudioInputDevice::Default)?;
+        let mut input_device = AudioInputDevice::find_device(super::super::AudioSource::Default)?;
 
         let config = Arc::new(audio::AudioInputConfig {
             max_buffered_duration: Duration::from_secs(2),
@@ -735,8 +734,7 @@ mod tests {
             return Ok(());
         };
 
-        let mut input_device =
-            AudioInputDevice::find_device(super::super::AudioInputDevice::Default)?;
+        let mut input_device = AudioInputDevice::find_device(super::super::AudioSource::Default)?;
 
         // Try to request an impossibly high sample rate
         let config = Arc::new(audio::AudioInputConfig {
@@ -767,8 +765,7 @@ mod tests {
             return Ok(());
         };
 
-        let mut input_device =
-            AudioInputDevice::find_device(super::super::AudioInputDevice::Default)?;
+        let mut input_device = AudioInputDevice::find_device(super::super::AudioSource::Default)?;
 
         let config = Arc::new(audio::AudioInputConfig {
             max_buffered_duration: Duration::from_secs(1),
@@ -801,8 +798,7 @@ mod tests {
             return Ok(());
         };
 
-        let mut input_device =
-            AudioInputDevice::find_device(super::super::AudioInputDevice::Default)?;
+        let mut input_device = AudioInputDevice::find_device(super::super::AudioSource::Default)?;
 
         let config = Arc::new(audio::AudioInputConfig {
             max_buffered_duration: Duration::from_secs(2),

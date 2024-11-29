@@ -10,14 +10,14 @@
 mod system;
 mod file;
 
-use super::stream::{AudioInputChunk, AudioInputStream, AudioStreamGuard};
+use super::stream::{AudioInputStream, AudioStreamGuard};
 use anyhow::Result;
 use std::{path::PathBuf, sync::Arc};
 
-pub use system::list_device_names;
+pub use system::{list_device_names, AudioInputDevice};
 
 #[derive(Clone, Debug)]
-pub enum AudioInputDevice {
+pub enum AudioSource {
     /// Use that system default input device.  Fail if there is no suitable default device.
     Default,
 

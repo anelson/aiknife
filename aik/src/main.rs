@@ -1,3 +1,4 @@
+use aiknife::audio;
 use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 use std::process::exit;
@@ -28,17 +29,40 @@ struct Globals {
 #[derive(Subcommand)]
 enum Commands {
     /// Use Whisper to transcribe audio to text
-    Whisper {},
+    Whisper {
+        #[command(subcommand)]
+        command: WhisperCommands,
+    },
+}
+
+#[derive(Subcommand)]
+enum WhisperCommands {
+    /// List all available audio devices
+    ListDevices,
 }
 
 impl Commands {
     async fn execute(self, globals: &Globals) -> anyhow::Result<()> {
         use Commands::*;
         match self {
-            Whisper {} => {
-                println!("Shhh!");
-                todo!()
-            }
+            Whisper { command } => match command {
+                WhisperCommands::ListDevices => {
+                    println!("Listing devices");
+                    let (input, output) = audio::list_device_names()?;
+
+                    println!("Input devices:");
+                    for device in input {
+                        println!("  {}", device);
+                    }
+
+                    println!("Output devices:");
+                    for device in output {
+                        println!("  {}", device);
+                    }
+
+                    Ok(())
+                }
+            },
         }
     }
 }
