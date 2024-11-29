@@ -37,6 +37,7 @@ snafu              = "0.7.4"
 specta             = { version = "=2.0.0-rc.20", features = ["uuid"] }
 specta-typescript  = "0.0.7"
 strum              = { version = "0.24.1", features = ["derive"] }
+symphonia          = { version = "0.5.4", features = ["all-codecs", "opt-simd"] }
 tauri              = { version = "2.0.0", features = [] }
 tauri-build        = { version = "2.0.0", features = [] }
 tauri-plugin-shell = "2.0.0"

@@ -2,6 +2,7 @@ pub mod chat;
 pub mod audio;
 mod error;
 mod tokenize;
+mod util;
 
 pub use error::Result;
 

@@ -545,7 +545,7 @@ fn cpal_stream_host(
                     // also bad, but in this case something's already broken so I think it's
                     // probably better to block but make sure downstream sees the error, rather
                     // than hiding it.
-                    let _ = error_callback_sender.send(Err(err).with_context(|| format!("Error in audio stream")));
+                    let _ = error_callback_sender.send(Err(err).context("Error in audio stream".to_string()));
                 },
                 None,
             )?;
@@ -573,8 +573,9 @@ fn cpal_stream_host(
     // crossbeam.  All of the logic of buffering and whatever other post-processing will have
     // to be done on the receive side.
     let _thread = std::thread::spawn(move || {
-        // Propagate the spawn from the caller into this thread too
-        let _guard = current_span.enter();
+        // Propagate the span from the caller into this thread too
+        let span = debug_span!(parent: &current_span, "cpal_stream_host_thread");
+        let _guard = span.enter();
 
         debug!("Starting audio stream thread");
 
@@ -583,8 +584,7 @@ fn cpal_stream_host(
                 Ok(stream) => stream,
                 Err(e) => {
                     error!(%e, "Error creating audio stream");
-                    let _ = init_result_sender
-                        .send(Err(e).with_context(|| "Error creating audio stream".to_string()));
+                    let _ = init_result_sender.send(Err(e).context("Error creating audio stream"));
                     anyhow::bail!("Error creating audio stream");
                 }
             };
@@ -592,8 +592,7 @@ fn cpal_stream_host(
         debug!("Starting audio stream");
         if let Err(e) = cpal_stream.play() {
             error!(%e, "Error starting audio stream");
-            let _ = init_result_sender
-                .send(Err(e).with_context(|| "Error in audio stream".to_string()));
+            let _ = init_result_sender.send(Err(e).context("Error in audio stream"));
 
             // No one will see this returned error from the thread, but when this scope ends the
             // channel sender for audio chunks will go out of scope, which will cause the receiver
@@ -605,7 +604,13 @@ fn cpal_stream_host(
         // worked, and then wait around for an abort signal
         let _ = init_result_sender.send(Ok(()));
 
-        // Wait for the abort signal
+        // Wait for the abort signal.  This might seem a bit odd, but CPAL has already launched its
+        // own separate thread that will process the audio from the device and invoke our data
+        // callback, and the other end of the channel is held by whoever initiated this stream in
+        // the first place, so the only purpose of this thread now is to wait until the stream is
+        // stopped, as indicated by a message being sent on this abort receiver or alternatively by
+        // abort sender being dropped, at which point we know we can exit this thread and allow the
+        // `cpal::Stream` struct to go out of scope and be dropped.
         match abort_receiver.recv() {
             Ok(()) => {
                 debug!("Received abort signal; stopping audio stream");
@@ -877,6 +882,53 @@ mod tests {
             "Error should mention channel selection not implemented"
         );
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_audio_input_stream_clean_termination() -> Result<()> {
+        crate::test_helpers::init_test_logging();
+
+        // Skip test if no default input device
+        let host = cpal::default_host();
+        let Some(_) = host.default_input_device() else {
+            debug!("Skipping test_audio_input_stream_clean_termination: no default input device available");
+            return Ok(());
+        };
+
+        let mut input_device =
+            AudioInputDevice::find_device(super::super::AudioInputDevice::Default)?;
+
+        let config = Arc::new(audio::AudioInputConfig {
+            max_buffered_duration: Duration::from_secs(2),
+            ..Default::default()
+        });
+
+        let (guard, mut stream) = input_device.start_stream(config)?;
+
+        // Get the first chunk and then drop the guard
+        let first_chunk = stream.next().expect("Should get at least one chunk")?;
+        assert!(
+            !first_chunk.samples.is_empty(),
+            "First chunk should contain samples"
+        );
+
+        // Drop the guard, which should trigger stream termination
+        drop(guard);
+
+        // Read any remaining chunks from the stream
+        let mut chunk_count = 1; // Count the first chunk we already got
+        while let Some(chunk_result) = stream.next() {
+            // Verify each chunk is Ok (no errors during shutdown)
+            let chunk = chunk_result?;
+            assert!(
+                !chunk.samples.is_empty(),
+                "Chunks during shutdown should contain samples"
+            );
+            chunk_count += 1;
+        }
+
+        debug!("Received {chunk_count} chunks before stream ended");
         Ok(())
     }
 }

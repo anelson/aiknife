@@ -20,6 +20,7 @@ itertools    = { workspace = true }
 reqwest      = { workspace = true }
 serde        = { workspace = true }
 specta       = { workspace = true, optional = true }
+symphonia    = { workspace = true }
 tiktoken-rs  = { workspace = true }
 tokio        = { workspace = true }
 tokio-stream = { workspace = true }
