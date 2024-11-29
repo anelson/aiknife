@@ -3,20 +3,21 @@
 //! caller of this work in another thread.
 //!
 //! The basic pattern here is to use crossbeam channels in a few ways:
-//! - A bounded(0) channel of type `()` is used to signal to the thread that it should stop its
+//! - A bounded(1) channel of type `()` is used to signal to the thread that it should stop its
 //!   work.
-//! - A bounded(0) channel of type `Result<T>` is used indicate the success or failure of the
-//!   initialization part of the work.
-//! - A higher-bounded channel of type `Result<T>` is used to produce results of the work.
+//! - A bounded(1) channel of type `Result<T>` is used indicate the success or failure of the
+//!   the work that's done in another thread, the successful completion of which produces some type
+//!   `T`.
+//! - A higher-bounded channel of some type `T` is used to produce ongoing results of the work
+//! (this can be progress updates, or it can be packets read a bit at a time from a media file).
 //!
 //! # Thread Workers
 //!
 //! The bit of work that needs to happen in another thread is generalized into the concept of a
 //! "thread worker".  Not much is assumed about this work, other than that it's blocking (no async
-//! runtime is provided), it's fallible, it has a (potentially fallible) initialization step that
-//! also must be run in the worker thread, and it produces a stream of work product.
+//! runtime is provided), it's fallible, and it produces a stream of work product while it runs.
 //!
-//! To keep things reasonably simple, traits are used to represent both the initialization step and
+//! To keep things reasonably simple, a trait is used to describe the work that needs to be done in
 //! the running step.  Unfortunately that means that the implementation of the thread worker isn't
 //! just a simple function but needs a type to hang the trait impl on.  This isn't ideal but this
 //! entire module is a yak-shaving exercise to indulge my need for clean abstractions, and I'm not
@@ -25,13 +26,13 @@
 
 use anyhow::Result;
 use crossbeam::channel::{bounded, Receiver, Sender};
-use std::thread::{self, JoinHandle};
+use std::thread;
 use tracing::*;
 
 /// Create a stop signal sender/receiver pair for a thread worker.
-fn new_stop_signal<T: ThreadWorkerWork>() -> (StopSignalSender, StopSignalReceiver) {
-    let worker = T::worker_name();
-
+fn new_stop_signal<T: ThreadWorker>(
+    worker: &'static str,
+) -> (StopSignalSender, StopSignalReceiver) {
     // Need a bound of 1 here.
     // A bound of 0 means the send will block (or fail for non-blocking sends) if the worker is not
     // actively at this very moment blocking on a stop signal.  In almost all cases the worker does
@@ -144,14 +145,13 @@ impl StopSignalReceiver {
 ///
 /// The correct bound for this channel is very dependent upon the work being performed and
 /// therefore is a property of the worker itself
-fn new_running_output_channel<T: ThreadWorkerWork>(
+fn new_running_output_channel<T: ThreadWorker>(
     bound: usize,
+    worker: &'static str,
 ) -> (
     RunningOutputSender<T::RunningOutput>,
     RunningOutputReceiver<T::RunningOutput>,
 ) {
-    let worker = T::worker_name();
-
     let (sender, receiver) = bounded(bound);
     (
         RunningOutputSender { sender, worker },
@@ -292,12 +292,12 @@ impl<T> RunningOutputReceiver<T> {
 }
 
 /// Create a final output sender/receiver pair for a thread worker.
-fn new_final_output_channel<T: ThreadWorkerWork>() -> (
+fn new_final_output_channel<T: ThreadWorker>(
+    worker: &'static str,
+) -> (
     FinalOutputSender<T::FinalOutput>,
     FinalOutputReceiver<T::FinalOutput>,
 ) {
-    let worker = T::worker_name();
-
     // The worker should be able to send the final result and exit, even if the receiver is not yet
     // ready to receive it.  That's why the bound is 1.
     let (sender, receiver) = bounded(1);
@@ -388,29 +388,7 @@ impl<T> FinalOutputReceiver<T> {
 /// Trait implemented by a type that will actually perform some work in a thread.
 ///
 /// By definition thist must be `Send` obviously.
-pub(crate) trait ThreadWorkerInit: Send + 'static {
-    /// The [`ThreadWorkerWork`] implementation that this initializer is initializing
-    type Work: ThreadWorkerWork<RunningOutput = Self::RunningOutput>;
-
-    /// The type that is produced as the work is being performed.
-    /// In the actual progress channel this is *not* wrapped in a `Result`, so if your particualr
-    /// implementation needs an ability to report a failure *and keep working*, this type will need
-    /// to be explicitly `Result<T>` instead of `T`.
-    type RunningOutput: Send + 'static;
-
-    /// The bound to use for the channel containing the running output for this worker.
-    fn running_output_channel_bound(&self) -> usize;
-
-    fn init(
-        self,
-        running_output_sender: RunningOutputSender<Self::RunningOutput>,
-    ) -> Result<Self::Work>;
-}
-
-/// Trait implemented by a type that will actually perform some work in a thread.
-///
-/// By definition thist must be `Send` obviously.
-pub(crate) trait ThreadWorkerWork: Send + 'static {
+pub(crate) trait ThreadWorker: Send + 'static {
     /// The type that is produced as the work is being performed.
     /// In the actual progress channel this is *not* wrapped in a `Result`, so if your particualr
     /// implementation needs an ability to report a failure *and keep working*, this type will need
@@ -423,11 +401,14 @@ pub(crate) trait ThreadWorkerWork: Send + 'static {
     /// here *is* wrapped in `Result`, unlike `RunningOutput` which is not.
     type FinalOutput: Send + 'static;
 
+    /// The bound to use for the channel containing the running output for this worker.
+    fn running_output_channel_bound(&self) -> usize;
+
     /// The name of the worker for logging purposes.  This doesn't have any semantic meaning other
     /// than as a thing to use in the logs to indicate what worker goes with what log events.
     ///
     /// The default impl just uses the type name of the worker
-    fn worker_name() -> &'static str {
+    fn name(&self) -> &'static str {
         std::any::type_name::<Self>()
     }
 
@@ -450,41 +431,34 @@ pub(crate) trait ThreadWorkerWork: Send + 'static {
 ///   exit
 /// - `running_output_receiver` to receive the running output from the worker as it runs.
 /// - `final_output_receiver` to receive the final output (or error) from the worker when it's done.
-pub(crate) fn start_thread_worker<T: ThreadWorkerInit>(
-    init: T,
+pub(crate) fn start_thread_worker<T: ThreadWorker>(
+    worker: T,
 ) -> (
     StopSignalSender,
     RunningOutputReceiver<T::RunningOutput>,
-    FinalOutputReceiver<<T::Work as ThreadWorkerWork>::FinalOutput>,
+    FinalOutputReceiver<T::FinalOutput>,
 ) {
-    let (stop_sender, stop_receiver) = new_stop_signal::<T::Work>();
+    let (stop_sender, stop_receiver) = new_stop_signal::<T>(worker.name());
     let (running_output_sender, running_output_receiver) =
-        new_running_output_channel::<T::Work>(init.running_output_channel_bound());
-    let (final_output_sender, final_output_receiver) = new_final_output_channel::<T::Work>();
+        new_running_output_channel::<T>(worker.running_output_channel_bound(), worker.name());
+    let (final_output_sender, final_output_receiver) = new_final_output_channel::<T>(worker.name());
 
     let current_span = Span::current();
     let _handle = thread::spawn(move || {
         // Propagate the span from the caller into this thread too
-        let span =
-            debug_span!(parent: &current_span, "thread_worker", worker = T::Work::worker_name());
+        let span = debug_span!(parent: &current_span, "thread_worker", worker = worker.name());
         let _guard = span.enter();
         debug!("Starting worker thread");
 
-        match init.init(running_output_sender.clone()) {
+        match worker.run(stop_receiver, running_output_sender) {
             Err(e) => {
-                error!(error = %e, "Failed to initialize worker");
+                error!(error = %e, "Worker failed");
                 let _ = final_output_sender.send(Err(e));
             }
-            Ok(work) => match work.run(stop_receiver, running_output_sender) {
-                Err(e) => {
-                    error!(error = %e, "Worker failed");
-                    let _ = final_output_sender.send(Err(e));
-                }
-                Ok(output) => {
-                    debug!("Worker completed successfully");
-                    let _ = final_output_sender.send(Ok(output));
-                }
-            },
+            Ok(output) => {
+                debug!("Worker completed successfully");
+                let _ = final_output_sender.send(Ok(output));
+            }
         }
 
         debug!("Worker thread exiting");
@@ -493,47 +467,94 @@ pub(crate) fn start_thread_worker<T: ThreadWorkerInit>(
     (stop_sender, running_output_receiver, final_output_receiver)
 }
 
+/// A variation on [`start_thread_worker`] that takes a closure as the worker instead of an
+/// explicit [`ThreadWorker`] implementation.
+///
+/// See [`start_thread_worker`] for more details.
+pub(crate) fn start_func_as_thread_worker<RunningOutput, FinalOutput, Func>(
+    worker_name: &'static str,
+    running_output_channel_bound: usize,
+    func: Func,
+) -> (
+    StopSignalSender,
+    RunningOutputReceiver<RunningOutput>,
+    FinalOutputReceiver<FinalOutput>,
+)
+where
+    RunningOutput: Send + 'static,
+    FinalOutput: Send + 'static,
+    Func: FnOnce(StopSignalReceiver, RunningOutputSender<RunningOutput>) -> Result<FinalOutput>
+        + Send
+        + 'static,
+{
+    let worker = FuncThreadWorker {
+        worker_name,
+        running_output_channel_bound,
+        func,
+        _phantom: std::marker::PhantomData,
+    };
+
+    start_thread_worker(worker)
+}
+
+/// A [`ThreadWorker`] implementation that runs an arbitrary closure as the work to do.
+struct FuncThreadWorker<RunningOutput, FinalOutput, Func> {
+    worker_name: &'static str,
+    running_output_channel_bound: usize,
+    func: Func,
+    _phantom: std::marker::PhantomData<(RunningOutput, FinalOutput)>,
+}
+
+impl<RunningOutput, FinalOutput, Func> ThreadWorker
+    for FuncThreadWorker<RunningOutput, FinalOutput, Func>
+where
+    RunningOutput: Send + 'static,
+    FinalOutput: Send + 'static,
+    Func: FnOnce(StopSignalReceiver, RunningOutputSender<RunningOutput>) -> Result<FinalOutput>
+        + Send
+        + 'static,
+{
+    type RunningOutput = RunningOutput;
+    type FinalOutput = FinalOutput;
+
+    fn running_output_channel_bound(&self) -> usize {
+        self.running_output_channel_bound
+    }
+
+    fn name(&self) -> &'static str {
+        self.worker_name
+    }
+
+    fn run(
+        self,
+        stop_signal: StopSignalReceiver,
+        running_output: RunningOutputSender<Self::RunningOutput>,
+    ) -> Result<Self::FinalOutput> {
+        (self.func)(stop_signal, running_output)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use std::time::Duration;
 
-    // A simple test worker that counts up to a number
-    struct TestWorkerInit {
-        count_to: u32,
-        delay_ms: u64,
-    }
-
+    /// A simple test worker that counts up to a number
     struct TestWorker {
         count_to: u32,
         delay_ms: u64,
     }
 
-    impl ThreadWorkerInit for TestWorkerInit {
-        type Work = TestWorker;
-        type RunningOutput = u32;
-
-        fn running_output_channel_bound(&self) -> usize {
-            5
-        }
-
-        fn init(
-            self,
-            _running_output: RunningOutputSender<Self::RunningOutput>,
-        ) -> Result<Self::Work> {
-            Ok(TestWorker {
-                count_to: self.count_to,
-                delay_ms: self.delay_ms,
-            })
-        }
-    }
-
-    impl ThreadWorkerWork for TestWorker {
+    impl ThreadWorker for TestWorker {
         type RunningOutput = u32;
         type FinalOutput = u32;
 
-        fn worker_name() -> &'static str {
+        fn name(&self) -> &'static str {
             "test_worker"
+        }
+
+        fn running_output_channel_bound(&self) -> usize {
+            5
         }
 
         fn run(
@@ -560,7 +581,7 @@ mod test {
     fn test_stop_signal() {
         crate::test_helpers::init_test_logging();
 
-        let (sender, receiver) = new_stop_signal::<TestWorker>();
+        let (sender, receiver) = new_stop_signal::<TestWorker>("test");
         assert!(!receiver.is_stop_signaled());
 
         sender.signal_stop();
@@ -571,7 +592,7 @@ mod test {
     fn test_stop_signal_drop() {
         crate::test_helpers::init_test_logging();
 
-        let (sender, receiver) = new_stop_signal::<TestWorker>();
+        let (sender, receiver) = new_stop_signal::<TestWorker>("test");
         assert!(!receiver.is_stop_signaled());
 
         drop(sender);
@@ -582,7 +603,7 @@ mod test {
     fn test_running_output_channel() {
         crate::test_helpers::init_test_logging();
 
-        let (sender, receiver) = new_running_output_channel::<TestWorker>(2);
+        let (sender, receiver) = new_running_output_channel::<TestWorker>(2, "test");
 
         assert!(sender.send(1).is_ok());
         assert!(sender.send(2).is_ok());
@@ -595,7 +616,7 @@ mod test {
     fn test_running_output_channel_full() {
         crate::test_helpers::init_test_logging();
 
-        let (sender, receiver) = new_running_output_channel::<TestWorker>(1);
+        let (sender, receiver) = new_running_output_channel::<TestWorker>(1, "test");
 
         assert!(sender.send(1).is_ok());
         assert!(sender.try_send(2).is_err());
@@ -607,7 +628,7 @@ mod test {
     fn test_final_output_channel() {
         crate::test_helpers::init_test_logging();
 
-        let (sender, receiver) = new_final_output_channel::<TestWorker>();
+        let (sender, receiver) = new_final_output_channel::<TestWorker>("test");
 
         sender.send(Ok(42)).unwrap();
         match receiver.recv().unwrap() {
@@ -620,12 +641,12 @@ mod test {
     fn test_complete_worker_lifecycle() {
         crate::test_helpers::init_test_logging();
 
-        let init = TestWorkerInit {
+        let worker = TestWorker {
             count_to: 5,
             delay_ms: 100,
         };
 
-        let (_stop_sender, running_receiver, final_receiver) = start_thread_worker(init);
+        let (_stop_sender, running_receiver, final_receiver) = start_thread_worker(worker);
 
         let mut received_outputs = Vec::new();
         let mut done = false;
@@ -646,12 +667,12 @@ mod test {
     fn test_worker_early_stop() {
         crate::test_helpers::init_test_logging();
 
-        let init = TestWorkerInit {
+        let worker = TestWorker {
             count_to: 100,
             delay_ms: 10,
         };
 
-        let (stop_sender, _running_receiver, final_receiver) = start_thread_worker(init);
+        let (stop_sender, _running_receiver, final_receiver) = start_thread_worker(worker);
 
         // Let it run for a bit
         thread::sleep(Duration::from_millis(50));
@@ -666,24 +687,29 @@ mod test {
     // Test worker that fails during initialization
     struct FailingInitWorker;
 
-    impl ThreadWorkerInit for FailingInitWorker {
-        type Work = TestWorker;
+    impl ThreadWorker for FailingInitWorker {
         type RunningOutput = u32;
+        type FinalOutput = u32;
+
+        fn name(&self) -> &'static str {
+            "fragile_worker"
+        }
 
         fn running_output_channel_bound(&self) -> usize {
             1
         }
 
-        fn init(
+        fn run(
             self,
+            _stop_signal: StopSignalReceiver,
             _running_output: RunningOutputSender<Self::RunningOutput>,
-        ) -> Result<Self::Work> {
+        ) -> Result<Self::FinalOutput> {
             anyhow::bail!("Initialization failed")
         }
     }
 
     #[test]
-    fn test_worker_init_failure() {
+    fn test_worker_failure() {
         crate::test_helpers::init_test_logging();
 
         let init = FailingInitWorker;
@@ -691,5 +717,128 @@ mod test {
 
         let result = final_receiver.recv().unwrap();
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_func_worker_basic() {
+        crate::test_helpers::init_test_logging();
+
+        let (_stop_sender, running_receiver, final_receiver) =
+            start_func_as_thread_worker("counter", 5, |stop_signal, running_output| {
+                let mut count = 0;
+                while count < 5 {
+                    if stop_signal.is_stop_signaled() {
+                        return Ok(count);
+                    }
+                    count += 1;
+                    let _ = running_output.send(count);
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Ok(count)
+            });
+
+        let mut received = Vec::new();
+        while let Some(output) = running_receiver.recv() {
+            received.push(output);
+        }
+
+        assert_eq!(received, vec![1, 2, 3, 4, 5]);
+        assert_eq!(final_receiver.recv().unwrap().unwrap(), 5);
+    }
+
+    #[test]
+    fn test_func_worker_early_stop() {
+        crate::test_helpers::init_test_logging();
+
+        let (stop_sender, _running_receiver, final_receiver) =
+            start_func_as_thread_worker("infinite_counter", 5, |stop_signal, running_output| {
+                let mut count = 0;
+                loop {
+                    if stop_signal.is_stop_signaled() {
+                        return Ok(count);
+                    }
+                    count += 1;
+                    let _ = running_output.send(count);
+                    thread::sleep(Duration::from_millis(10));
+                }
+            });
+
+        // Let it run for a bit
+        thread::sleep(Duration::from_millis(50));
+        stop_sender.signal_stop();
+
+        let final_count = final_receiver.recv().unwrap().unwrap();
+        assert!(
+            final_count > 0,
+            "Worker should have counted up before stopping"
+        );
+        assert!(
+            final_count < 100,
+            "Worker should have stopped before counting too high"
+        );
+    }
+
+    #[test]
+    fn test_func_worker_error() {
+        crate::test_helpers::init_test_logging();
+
+        let (_stop_sender, running_receiver, final_receiver) =
+            start_func_as_thread_worker("failing_counter", 5, |stop_signal, running_output| {
+                for i in 1..=3 {
+                    if stop_signal.is_stop_signaled() {
+                        return Ok(i);
+                    }
+                    let _ = running_output.send(i);
+                    thread::sleep(Duration::from_millis(10));
+                }
+                anyhow::bail!("Simulated failure")
+            });
+
+        let mut received = Vec::new();
+        while let Some(output) = running_receiver.recv() {
+            received.push(output);
+        }
+
+        assert_eq!(received, vec![1, 2, 3]);
+        assert!(final_receiver.recv().unwrap().is_err());
+    }
+
+    #[test]
+    fn test_func_worker_channel_bounds() {
+        crate::test_helpers::init_test_logging();
+
+        let (_stop_sender, running_receiver, final_receiver) = start_func_as_thread_worker(
+            "fast_counter",
+            2, // Small channel bound
+            |stop_signal, running_output| {
+                for i in 1..=5 {
+                    if stop_signal.is_stop_signaled() {
+                        return Ok(i);
+                    }
+                    // Use try_send to test channel bounds
+                    match running_output.try_send(i) {
+                        Ok(_) => (),
+                        Err(crossbeam::channel::TrySendError::Full(_)) => {
+                            // Expected when channel is full
+                            thread::sleep(Duration::from_millis(10));
+                        }
+                        Err(e) => anyhow::bail!("Unexpected error: {}", e),
+                    }
+                }
+                Ok(5)
+            },
+        );
+
+        // Sleep briefly to let the worker fill the channel
+        thread::sleep(Duration::from_millis(50));
+
+        let mut received = Vec::new();
+        while let Some(output) = running_receiver.try_recv() {
+            received.push(output);
+        }
+
+        assert!(!received.is_empty(), "Should have received some values");
+        assert!(received.len() <= 5, "Should not receive more than 5 values");
+        assert_eq!(final_receiver.recv().unwrap().unwrap(), 5);
     }
 }
