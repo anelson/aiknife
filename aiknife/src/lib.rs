@@ -1,5 +1,6 @@
 pub mod audio;
 pub mod chat;
+pub mod mcp;
 mod error;
 mod tokenize;
 mod util;
