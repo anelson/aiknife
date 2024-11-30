@@ -34,62 +34,54 @@ const TooltipButton: React.FC<TooltipButtonProps> = ({
 
 interface MessageState {
   messages: ChatMessage[];
-  pendingMessages: Set<string>;
-  messageErrors: Record<string, UiError>;
+  streamingContent: Record<string, string>;
 }
 
 const handleError = (e: unknown) => {
   error("Error details:" + JSON.stringify(e, null, 2));
 
   const uiError = e as UiError;
-  return uiError.details 
+  return uiError.details
     ? `${uiError.type}: ${uiError.message}\n\nDetails:\n${uiError.details}`
     : `${uiError.type}: ${uiError.message}`;
 };
 
 function useMessageEvents(): MessageState {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [pendingMessages, setPendingMessages] = useState<Set<string>>(
-    new Set(),
-  );
-  const [messageErrors, setMessageErrors] = useState<Record<string, UiError>>({});
+  const [streamingContent, setStreamingContent] = useState<Record<string, string>>({});
 
   useEffect(() => {
     let mounted = true;
 
     const setupListeners = async () => {
       const unlisteners = await Promise.all([
-        events.messagePending.listen((event) => {
+        events.newMessage.listen((event) => {
           if (!mounted) return;
           const message: ChatMessage = event.payload.message;
           setMessages((prev) => [...prev, message]);
-          setPendingMessages((prev) => new Set(prev).add(message.id));
         }),
 
-        events.messageResponse.listen((event) => {
+        events.messageStatusChanged.listen((event) => {
           if (!mounted) return;
-          const message: ChatMessage = event.payload.message;
-          setMessages((prev) => [...prev, message]);
-          setPendingMessages((prev) => {
-            const newSet = new Set(prev);
-            const lastPending = Array.from(newSet).pop();
-            if (lastPending) newSet.delete(lastPending);
-            return newSet;
-          });
+          const { message_id, status } = event.payload;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === message_id ? { ...msg, status } : msg
+            )
+          );
         }),
 
-        events.messageError.listen((event) => {
+        events.messageStream.listen((event) => {
           if (!mounted) return;
-          const { message_id, error } = event.payload;
-          setMessageErrors((prev) => ({
+          const { message_id, message_fragment } = event.payload;
+          setStreamingContent((prev) => ({
             ...prev,
-            [message_id]: error,
+            [message_id]: (prev[message_id] || "") + message_fragment,
           }));
-          setPendingMessages(new Set());
         }),
       ]);
 
-      return () => unlisteners.forEach((u) => u());
+      return () => unlisteners.forEach((u: () => void) => u());
     };
 
     const cleanup = setupListeners();
@@ -99,7 +91,7 @@ function useMessageEvents(): MessageState {
     };
   }, []);
 
-  return { messages, pendingMessages, messageErrors };
+  return { messages, streamingContent };
 }
 
 interface ErrorMessageProps {
@@ -108,14 +100,14 @@ interface ErrorMessageProps {
 
 const ErrorMessage: React.FC<ErrorMessageProps> = ({ error }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   const copyToClipboard = async () => {
     try {
       await navigator.clipboard.writeText(
-        `${error.type}: ${error.message}${error.details ? `\n\n${error.details}` : ''}`
+        `${error.type}: ${error.message}${error.details ? `\n\n${error.details}` : ""}`,
       );
     } catch (err) {
-      console.error('Failed to copy error to clipboard:', err);
+      console.error("Failed to copy error to clipboard:", err);
     }
   };
 
@@ -123,8 +115,8 @@ const ErrorMessage: React.FC<ErrorMessageProps> = ({ error }) => {
 
   return (
     <div className="relative inline-block">
-      <span 
-        className="error-trigger text-red-500 cursor-pointer hover:opacity-80" 
+      <span
+        className="error-trigger text-red-500 cursor-pointer hover:opacity-80"
         onClick={(e) => {
           e.stopPropagation();
           setIsExpanded(!isExpanded);
@@ -171,7 +163,7 @@ const ErrorMessage: React.FC<ErrorMessageProps> = ({ error }) => {
 };
 
 function App() {
-  const { messages, pendingMessages, messageErrors } = useMessageEvents();
+  const { messages, streamingContent } = useMessageEvents();
   const [input, setInput] = useState("");
   const [chatSessionError, setChatSessionError] = useState<string | null>(null);
   const [session, setSession] = useState<SessionHandle | null>(null);
@@ -230,6 +222,31 @@ function App() {
     }
   };
 
+  const handleAbort = async (messageId: string) => {
+    try {
+      await commands.abortMessage(messageId);
+    } catch (error) {
+      handleSessionError(error);
+    }
+  };
+
+  const handleRetry = async (messageId: string, content: string) => {
+    if (!session) return;
+
+    try {
+      await commands.retryMessage(session, messageId, content);
+    } catch (error) {
+      handleSessionError(error);
+    }
+  };
+
+  const isMessageInProgress = (message: ChatMessage) => {
+    return (
+      message.status.type === "Processing" || 
+      message.status.type === "Streaming"
+    );
+  };
+
   return (
     <div className="App">
       {chatSessionError && (
@@ -243,17 +260,30 @@ function App() {
           {messages.map((message) => (
             <div
               key={message.id}
-              className={`message ${message.role.toLowerCase()} ${
-                pendingMessages.has(message.id) ? "pending" : ""
-              }`}
+              className={`message ${message.role.toLowerCase()}`}
             >
               <div className="flex items-start gap-2">
-                <span className="flex-grow">{message.content}</span>
-                {messageErrors[message.id] && (
-                  <ErrorMessage error={messageErrors[message.id]} />
+                <span className="flex-grow">
+                  {streamingContent[message.id] || message.content}
+                </span>
+                {message.status.type === "Error" && (
+                  <>
+                    <ErrorMessage error={message.status.error} />
+                    <button
+                      onClick={() => handleRetry(message.id, message.content)}
+                      className="retry-button"
+                    >
+                      Retry
+                    </button>
+                  </>
                 )}
-                {pendingMessages.has(message.id) && (
-                  <span className="pending-indicator">...</span>
+                {isMessageInProgress(message) && streamingContent[message.id] && (
+                  <button
+                    onClick={() => handleAbort(message.id)}
+                    className="abort-button"
+                  >
+                    Stop
+                  </button>
                 )}
               </div>
             </div>

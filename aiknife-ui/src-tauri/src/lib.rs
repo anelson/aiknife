@@ -12,15 +12,17 @@ fn generate_specta_bindings() -> Result<tauri_specta::Builder> {
             chat::new_session,
             chat::send_message,
             chat::check_api_key,
+            chat::abort_message,
+            chat::retry_message,
         ])
         .events(tauri_specta::collect_events![
-            chat::events::MessagePending,
-            chat::events::MessageResponse,
-            chat::events::MessageError,
+            chat::events::NewMessage,
+            chat::events::MessageStatusChanged,
+            chat::events::MessageStream,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Throw);
 
-    #[cfg(debug_assertions)] // <- Only export on non-release builds
+    #[cfg(debug_assertions)]
     builder
         .export(
             specta_typescript::Typescript::default(),

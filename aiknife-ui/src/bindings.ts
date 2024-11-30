@@ -13,6 +13,12 @@ async sendMessage(session: SessionHandle, message: string) : Promise<string> {
 },
 async checkApiKey() : Promise<null> {
     return await TAURI_INVOKE("check_api_key");
+},
+async abortMessage(messageId: string) : Promise<null> {
+    return await TAURI_INVOKE("abort_message", { messageId });
+},
+async retryMessage(session: SessionHandle, originalMessageId: string, message: string) : Promise<string> {
+    return await TAURI_INVOKE("retry_message", { session, originalMessageId, message });
 }
 }
 
@@ -20,13 +26,13 @@ async checkApiKey() : Promise<null> {
 
 
 export const events = __makeEvents__<{
-messageError: MessageError,
-messagePending: MessagePending,
-messageResponse: MessageResponse
+messageStatusChanged: MessageStatusChanged,
+messageStream: MessageStream,
+newMessage: NewMessage
 }>({
-messageError: "message-error",
-messagePending: "message-pending",
-messageResponse: "message-response"
+messageStatusChanged: "message-status-changed",
+messageStream: "message-stream",
+newMessage: "new-message"
 })
 
 /** user-defined constants **/
@@ -36,10 +42,10 @@ messageResponse: "message-response"
 /** user-defined types **/
 
 export type ChatMessage = { id: string; role: Role; content: string; status: MessageStatus }
-export type MessageError = { message_id: string; error: UiError }
-export type MessagePending = { message: ChatMessage }
-export type MessageResponse = { message: ChatMessage }
-export type MessageStatus = "Pending" | "Complete"
+export type MessageStatus = { type: "Pending" } | { type: "Processing" } | { type: "Streaming" } | { type: "Complete" } | { type: "Error"; error: UiError }
+export type MessageStatusChanged = { message_id: string; status: MessageStatus }
+export type MessageStream = { message_id: string; message_fragment: string }
+export type NewMessage = { message: ChatMessage }
 export type Role = "user" | "assistant"
 export type SessionHandle = { id: string }
 /**

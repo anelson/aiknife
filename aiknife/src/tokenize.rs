@@ -250,12 +250,11 @@ pub async fn tokenize_file(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use std::fs::File;
     use std::io::{BufRead, BufReader};
-
+    use std::path::Path;
     use walkdir::WalkDir;
-
-    use super::*;
 
     /// For each of the files in `test_data/input`, we have pre-computed expected tokens from the
     /// official `tiktoken` OpenAI github repo implementation.  Tokenize each of those files into

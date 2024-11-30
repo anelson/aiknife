@@ -1,22 +1,19 @@
 use crate::Result;
 use anyhow::Context;
-use reqwest::Client;
+use async_openai as oai;
+use futures::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "tauri")]
 use specta::Type;
 use std::collections::HashMap;
 use std::env;
 use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
+use tracing::*;
 use uuid::Uuid;
 
 pub type SessionId = Uuid;
-
-#[derive(Serialize)]
-#[cfg_attr(feature = "tauri", derive(Type))]
-struct ChatCompletionRequest {
-    model: String,
-    messages: Vec<Message>,
-}
 
 #[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(feature = "tauri", derive(Type))]
@@ -24,6 +21,15 @@ struct ChatCompletionRequest {
 pub enum Role {
     User,
     Assistant,
+}
+
+impl Into<oai::types::Role> for Role {
+    fn into(self) -> oai::types::Role {
+        match self {
+            Role::User => oai::types::Role::User,
+            Role::Assistant => oai::types::Role::Assistant,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -47,24 +53,35 @@ impl Message {
             content,
         }
     }
-}
 
-#[derive(Deserialize)]
-#[cfg_attr(feature = "tauri", derive(Type))]
-struct ChatCompletionResponse {
-    choices: Vec<Choice>,
-}
-
-#[derive(Deserialize)]
-#[cfg_attr(feature = "tauri", derive(Type))]
-struct Choice {
-    message: Message,
+    fn to_oai_chat_completion_message(&self) -> oai::types::ChatCompletionRequestMessage {
+        match self.role {
+            Role::User => oai::types::ChatCompletionRequestMessage::User(
+                oai::types::ChatCompletionRequestUserMessage {
+                    content: oai::types::ChatCompletionRequestUserMessageContent::Text(
+                        self.content.clone(),
+                    ),
+                    ..Default::default()
+                },
+            ),
+            Role::Assistant => oai::types::ChatCompletionRequestMessage::Assistant(
+                oai::types::ChatCompletionRequestAssistantMessage {
+                    content: Some(
+                        oai::types::ChatCompletionRequestAssistantMessageContent::Text(
+                            self.content.clone(),
+                        ),
+                    ),
+                    ..Default::default()
+                },
+            ),
+        }
+    }
 }
 
 #[derive(Clone)]
 pub struct Session {
     id: Uuid,
-    api_key: String,
+    client: oai::Client<oai::config::OpenAIConfig>,
     inner: Arc<Mutex<SessionInner>>,
 }
 
@@ -74,9 +91,13 @@ struct SessionInner {
 
 impl Session {
     pub fn new() -> Result<Self> {
+        let api_key = env::var("OPENAI_API_KEY").context("OPENAI_API_KEY must be set")?;
+
+        let config = oai::config::OpenAIConfig::new().with_api_key(api_key);
+
         Ok(Self {
             id: Uuid::now_v7(),
-            api_key: env::var("OPENAI_API_KEY").context("OPENAI_API_KEY must be set")?,
+            client: oai::Client::with_config(config),
             inner: Arc::new(Mutex::new(SessionInner {
                 messages: Vec::new(),
             })),
@@ -87,33 +108,109 @@ impl Session {
         self.id
     }
 
-    pub async fn chat_completion(&self, message: Message) -> Result<String> {
-        let mut messages = self.inner.lock().unwrap().messages.clone();
-        messages.push(message);
+    pub async fn chat_completion_stream(
+        &self,
+        message: String,
+        cancel_token: CancellationToken,
+    ) -> Result<impl Stream<Item = Result<String>>> {
+        let (tx, rx) = mpsc::channel(32);
+        let request = {
+            let mut guard = self.inner.lock().unwrap();
+            let messages = &mut guard.messages;
 
-        let client = Client::new();
-        let request = ChatCompletionRequest {
-            model: "gpt-3.5-turbo".to_string(),
-            messages: messages.clone(),
+            messages.push(Message::new_user_message(message.clone()));
+
+            oai::types::CreateChatCompletionRequestArgs::default()
+                .model("gpt-3.5-turbo")
+                .messages(
+                    messages
+                        .iter()
+                        .map(|m| m.to_oai_chat_completion_message())
+                        .collect::<Vec<_>>(),
+                )
+                .stream(true)
+                .build()?
         };
 
-        let response = client
-            .post("https://api.openai.com/v1/chat/completions")
-            .header("Authorization", format!("Bearer {}", &self.api_key))
-            .json(&request)
-            .send()
-            .await
-            .context("Failed to send request")?
-            .json::<ChatCompletionResponse>()
-            .await
-            .context("Failed to parse JSON response")?;
+        debug!(session_id = %self.id, %message, "Starting chat stream");
 
-        // Update the session with the message we just sent to chat, and also the response
-        let mut inner = self.inner.lock().unwrap();
-        inner.messages = messages;
-        inner.messages.push(response.choices[0].message.clone());
+        let mut stream = self.client.chat().create_stream(request).await?;
 
-        Ok(inner.messages.last().as_ref().unwrap().content.clone())
+        tokio::spawn({
+            let me = self.clone();
+
+            async move {
+                // Put an initial empty assistant message in the session; we'll gradually fill it
+                // with the assistant's responses as they come in
+                let response_message_index = {
+                    let mut guard = me.inner.lock().unwrap();
+                    let response_message_index = guard.messages.len();
+                    guard
+                        .messages
+                        .push(Message::new_assistant_message("".to_string()));
+                    response_message_index
+                };
+
+                debug!(response_message_index, "Created new empty response message");
+
+                loop {
+                    tokio::select! {
+                        // Check for cancellation
+                        _ = cancel_token.cancelled() => {
+                            debug!("Chat aborted by user request");
+                            let _ = tx.send(Err(anyhow::anyhow!("Chat aborted by user request"))).await;
+                            break;
+                        }
+                        // Process next stream item
+                        next = stream.next() => {
+                            match next {
+                                Some(result) => {
+                                    match result {
+                                        Ok(response) => {
+                                            debug!(?response, "Received chat stream response");
+                                            if let Some(content) = &response.choices[0].delta.content {
+                                                // Update session with assistant message, and also push it to the
+                                                // requestor's stream
+                                                {
+                                                    let mut guard = me.inner.lock().unwrap();
+                                                    guard.messages[response_message_index]
+                                                        .content
+                                                        .push_str(content);
+                                                }
+                                                if tx.send(Ok(content.clone())).await.is_err() {
+                                                    // Send fails only when the receiver is
+                                                    // dropped.  If the receiver is dropped then no
+                                                    // one is listening for completions, so we
+                                                    // should abort.
+                                                    warn!("Chat completion receiver dropped; aborting chat stream");
+                                                    break;
+                                                }
+                                            } else {
+                                                // Content is None.  This seems likely to be at the
+                                                // end of the response, but the async-openai
+                                                // example doesn't conclude until the response
+                                                // stream itself returns None.
+                                                debug!("Received content value of None; ignoring");
+                                            }
+                                        }
+                                        Err(e) => {
+                                            error!("Stream error: {}", e);
+                                            let _ = tx.send(Err(e.into())).await;
+                                            break;
+                                        }
+                                    }
+                                }
+                                None => break,
+                            }
+                        }
+                    }
+                }
+
+                debug!("Chat stream ended");
+            }
+        });
+
+        Ok(tokio_stream::wrappers::ReceiverStream::new(rx))
     }
 }
 
