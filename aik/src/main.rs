@@ -1,4 +1,4 @@
-use aiknife::audio;
+use aiknife::{audio, mcp};
 use clap::{Args, Parser, Subcommand};
 use std::io::Write;
 use std::path::PathBuf;
@@ -34,6 +34,15 @@ enum Commands {
         #[command(subcommand)]
         command: WhisperCommands,
     },
+
+    /// Run an MCP server, listening on stdin and responding on stdout
+    /// Log events are written to stderr
+    Mcp {
+        /// Listen on the specified Unix domain socket
+        ///
+        /// If not specified, the default behavior is to listen on stdin and respond on stdout.
+        socket: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -64,6 +73,8 @@ impl Commands {
         use Commands::*;
         match self {
             Whisper { command } => match command {
+                // TODO: All whisper operations are blocking.  Should they be run in
+                // `tokio::spawn_blocking`?
                 WhisperCommands::ListDevices => {
                     println!("Listing devices");
                     let (input, output) = audio::list_device_names()?;
@@ -113,6 +124,24 @@ impl Commands {
                     println!("\rRead {total_samples} samples in total");
                 }
             },
+            Mcp { socket } => {
+                let transport: Box<dyn mcp::McpTransport> = match socket {
+                    Some(path) => {
+                        let transport = mcp::UnixSocketTransport::bind(&path).await?;
+                        info!("Listening on socket {}", path.display());
+                        Box::new(transport)
+                    }
+                    None => {
+                        let stdin = tokio::io::stdin();
+                        let stdout = tokio::io::stdout();
+                        let transport = mcp::StdioTransport::stdio(stdin, stdout);
+                        info!("Listening on stdin");
+                        Box::new(transport)
+                    }
+                };
+
+                aiknife::mcp::serve(transport).await?;
+            }
         }
 
         Ok(())
@@ -122,12 +151,20 @@ impl Commands {
 #[tokio::main]
 async fn main() {
     let cli = Cli::parse();
+    // You can see how many times a particular flag or argument occurred
+    // Note, only flags can have multiple occurrences
+    let default_log_directive = match cli.globals.debug {
+        0 => LevelFilter::WARN,
+        1 => LevelFilter::INFO,
+        2 => LevelFilter::DEBUG,
+        _ => LevelFilter::TRACE,
+    };
 
     // Initialize tracing with JSON formatting and full detail
     let subscriber = FmtSubscriber::builder()
         .with_env_filter(
             EnvFilter::builder()
-                .with_default_directive(LevelFilter::INFO.into())
+                .with_default_directive(default_log_directive.into())
                 .from_env_lossy(),
         )
         .json()
@@ -139,15 +176,6 @@ async fn main() {
     // You can check the value provided by positional arguments, or option arguments
     if let Some(config_path) = cli.globals.config.as_deref() {
         debug!("Value for config: {}", config_path.display());
-    }
-
-    // You can see how many times a particular flag or argument occurred
-    // Note, only flags can have multiple occurrences
-    match cli.globals.debug {
-        0 => debug!("Debug mode is off"),
-        1 => debug!("Debug mode is kind of on"),
-        2 => debug!("Debug mode is on"),
-        _ => debug!("Don't be crazy"),
     }
 
     match cli.command {

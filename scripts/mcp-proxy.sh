@@ -2,12 +2,12 @@
 #
 # This script sets up a debugging proxy for an MCP server that monitors JSON-RPC traffic
 #
-# Usage: ./mcp.sh <mcp_server_command>
+# Usage: ./mcp-proxy.sh <mcp_server_command>
 #
 # For example, to run the MCP server that exposes your home directory, and monitor the traffic to and from that server:
-# ./mcp.sh npx -y @modelcontextprotocol/server-filesystem ~/Dropbox
+# ./mcp-proxy.sh npx -y @modelcontextprotocol/server-filesystem ~/Dropbox
 #
-# The script will print instructions for connecting to the server, which will involve running `nc` 
+# The script will print instructions for connecting to the server, which will involve running `nc`
 # with some command line that will point it to a UDS.
 set -e # Exit on any error
 
@@ -80,42 +80,42 @@ mkfifo "$SOCKET_DIR/out_pipe"
 
 # Timestamp function that handles both input and output with JSON formatting
 timestamp_message() {
-    local direction=$1
-    while IFS= read -r line; do
-        printf "[%s] %s\n" "$(date '+%H:%M:%S')" "$direction" >&2
-        # Format JSON with jq and indent each line
-        echo "$line" | jq '.' | sed 's/^/    /' >&2
-        echo "$line" # Pass through the original message
-    done
+	local direction=$1
+	while IFS= read -r line; do
+		printf "[%s] %s\n" "$(date '+%H:%M:%S')" "$direction" >&2
+		# Format JSON with jq and indent each line
+		echo "$line" | jq '.' | sed 's/^/    /' >&2
+		echo "$line" # Pass through the original message
+	done
 }
 
 # Timestamp function for log messages written by the MCP server to stderr
 # The spec encourages the use of JSON structured logging but it's not required
 # so this doesn't make any assumptions about the format.
 timestamp_log() {
-    while IFS= read -r line; do
-        printf "[%s] LOG >>> %s\n" "$(date '+%H:%M:%S')" "$line" >&2
-    done
+	while IFS= read -r line; do
+		printf "[%s] LOG >>> %s\n" "$(date '+%H:%M:%S')" "$line" >&2
+	done
 }
 
 # Start the monitoring process that handles both directions
 (
-    # Put netcat in a subshell so we can handle its output properly
-    (
-        if [ -n "$NC_LISTEN_END" ]; then
-            # For BSD netcat, use a loop
-            eval "$NC_LISTEN \"$SOCKET_DIR/mcp.sock\" < \"$SOCKET_DIR/out_pipe\" | \
+	# Put netcat in a subshell so we can handle its output properly
+	(
+		if [ -n "$NC_LISTEN_END" ]; then
+			# For BSD netcat, use a loop
+			eval "$NC_LISTEN \"$SOCKET_DIR/mcp.sock\" < \"$SOCKET_DIR/out_pipe\" | \
                 timestamp_message \"IN\" > \"$SOCKET_DIR/in_pipe\" $NC_LISTEN_END"
-        else
-            # For GNU netcat, use -k
-            $NC_LISTEN "$SOCKET_DIR/mcp.sock" <"$SOCKET_DIR/out_pipe" |
-                timestamp_message "IN" >"$SOCKET_DIR/in_pipe"
-        fi
-    ) &
-    NC_PID=$!
+		else
+			# For GNU netcat, use -k
+			$NC_LISTEN "$SOCKET_DIR/mcp.sock" <"$SOCKET_DIR/out_pipe" |
+				timestamp_message "IN" >"$SOCKET_DIR/in_pipe"
+		fi
+	) &
+	NC_PID=$!
 
-    # Start the MCP server and connect it to our pipes, capturing stderr
-    "$@" <"$SOCKET_DIR/in_pipe" 2> >(timestamp_log) | timestamp_message "OUT" >"$SOCKET_DIR/out_pipe"
+	# Start the MCP server and connect it to our pipes, capturing stderr
+	"$@" <"$SOCKET_DIR/in_pipe" 2> >(timestamp_log) | timestamp_message "OUT" >"$SOCKET_DIR/out_pipe"
 ) &
 MONITOR_PID=$!
 

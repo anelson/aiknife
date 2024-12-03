@@ -1,7 +1,7 @@
 # Install the Typify tooling to use to codegen the Rust bindings
-# (for now, installs my own custom fork with a key for for MCP support)
+# (for now, installs a specific commit in `main` that has my PR to fix MCP handling)
 install-typify:
-    cargo install cargo-typify --force --git "https://github.com/anelson/typify.git" --branch "fix/mcp-json-schema-fixes"
+    cargo install cargo-typify --force --git "https://github.com/oxidecomputer/typify.git" --branch "main" --rev "f409d37"
 
 # Generate Rust types from the MCP JSON Schema
 mcpcodegen:

@@ -62,7 +62,7 @@ pub mod error {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Annotated {
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub annotations: ::std::option::Option<AnnotatedAnnotations>,
 }
 impl From<&Annotated> for Annotated {
@@ -103,9 +103,9 @@ impl Annotated {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct AnnotatedAnnotations {
     #[doc = "Describes who the intended customer of this object or data is.\n\nIt can include multiple entries to indicate content useful for multiple audiences (e.g., `[\"user\", \"assistant\"]`)."]
-    #[serde(default, skip_serializing_if = "std::vec::Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
     pub audience: ::std::vec::Vec<Role>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub priority: ::std::option::Option<f64>,
 }
 impl From<&AnnotatedAnnotations> for AnnotatedAnnotations {
@@ -156,7 +156,7 @@ pub struct BlobResourceContents {
     #[serde(
         rename = "mimeType",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub mime_type: ::std::option::Option<::std::string::String>,
     #[doc = "The URI of this resource."]
@@ -309,7 +309,7 @@ pub struct CallToolResult {
     #[serde(
         rename = "isError",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub is_error: ::std::option::Option<bool>,
     #[doc = "This result property is reserved by the protocol to allow clients and servers to attach additional metadata to their responses."]
@@ -455,7 +455,7 @@ impl CancelledNotification {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct CancelledNotificationParams {
     #[doc = "An optional string describing the reason for the cancellation. This MAY be logged or presented to the user."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub reason: ::std::option::Option<::std::string::String>,
     #[doc = "The ID of the request to cancel.\n\nThis MUST correspond to the ID of a request previously issued in the same direction."]
     #[serde(rename = "requestId")]
@@ -515,7 +515,7 @@ pub struct ClientCapabilities {
         ::std::string::String,
         ::serde_json::Map<::std::string::String, ::serde_json::Value>,
     >,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub roots: ::std::option::Option<ClientCapabilitiesRoots>,
     #[doc = "Present if the client supports sampling from an LLM."]
     #[serde(default, skip_serializing_if = "::serde_json::Map::is_empty")]
@@ -554,7 +554,7 @@ pub struct ClientCapabilitiesRoots {
     #[serde(
         rename = "listChanged",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub list_changed: ::std::option::Option<bool>,
 }
@@ -1113,11 +1113,11 @@ pub struct CompleteResultCompletion {
     #[serde(
         rename = "hasMore",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub has_more: ::std::option::Option<bool>,
     #[doc = "The total number of completion options available. This can exceed the number of values actually sent in the response."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub total: ::std::option::Option<i64>,
     #[doc = "An array of completion values. Must not exceed 100 items."]
     pub values: ::std::vec::Vec<::std::string::String>,
@@ -1281,7 +1281,7 @@ pub struct CreateMessageRequestParams {
     #[serde(
         rename = "includeContext",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub include_context: ::std::option::Option<CreateMessageRequestParamsIncludeContext>,
     #[doc = "The maximum number of tokens to sample, as requested by the server. The client MAY choose to sample fewer tokens than requested."]
@@ -1295,23 +1295,23 @@ pub struct CreateMessageRequestParams {
     #[serde(
         rename = "modelPreferences",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub model_preferences: ::std::option::Option<ModelPreferences>,
     #[serde(
         rename = "stopSequences",
         default,
-        skip_serializing_if = "std::vec::Vec::is_empty"
+        skip_serializing_if = "::std::vec::Vec::is_empty"
     )]
     pub stop_sequences: ::std::vec::Vec<::std::string::String>,
     #[doc = "An optional system prompt the server wants to use for sampling. The client MAY modify or omit this prompt."]
     #[serde(
         rename = "systemPrompt",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub system_prompt: ::std::option::Option<::std::string::String>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub temperature: ::std::option::Option<f64>,
 }
 impl From<&CreateMessageRequestParams> for CreateMessageRequestParams {
@@ -1468,7 +1468,7 @@ pub struct CreateMessageResult {
     #[serde(
         rename = "stopReason",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub stop_reason: ::std::option::Option<::std::string::String>,
 }
@@ -1626,7 +1626,7 @@ impl ::std::fmt::Display for Cursor {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct EmbeddedResource {
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub annotations: ::std::option::Option<EmbeddedResourceAnnotations>,
     pub resource: EmbeddedResourceResource,
     #[serde(rename = "type")]
@@ -1670,9 +1670,9 @@ impl EmbeddedResource {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct EmbeddedResourceAnnotations {
     #[doc = "Describes who the intended customer of this object or data is.\n\nIt can include multiple entries to indicate content useful for multiple audiences (e.g., `[\"user\", \"assistant\"]`)."]
-    #[serde(default, skip_serializing_if = "std::vec::Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
     pub audience: ::std::vec::Vec<Role>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub priority: ::std::option::Option<f64>,
 }
 impl From<&EmbeddedResourceAnnotations> for EmbeddedResourceAnnotations {
@@ -1927,7 +1927,7 @@ impl GetPromptRequestParams {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct GetPromptResult {
     #[doc = "An optional description for the prompt."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     pub messages: ::std::vec::Vec<PromptMessage>,
     #[doc = "This result property is reserved by the protocol to allow clients and servers to attach additional metadata to their responses."]
@@ -1999,7 +1999,7 @@ impl GetPromptResult {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ImageContent {
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub annotations: ::std::option::Option<ImageContentAnnotations>,
     #[doc = "The base64-encoded image data."]
     pub data: ::std::string::String,
@@ -2047,9 +2047,9 @@ impl ImageContent {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ImageContentAnnotations {
     #[doc = "Describes who the intended customer of this object or data is.\n\nIt can include multiple entries to indicate content useful for multiple audiences (e.g., `[\"user\", \"assistant\"]`)."]
-    #[serde(default, skip_serializing_if = "std::vec::Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
     pub audience: ::std::vec::Vec<Role>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub priority: ::std::option::Option<f64>,
 }
 impl From<&ImageContentAnnotations> for ImageContentAnnotations {
@@ -2243,7 +2243,7 @@ impl InitializeRequestParams {
 pub struct InitializeResult {
     pub capabilities: ServerCapabilities,
     #[doc = "Instructions describing how to use the server and its features.\n\nThis can be used by clients to improve the LLM's understanding of available tools, resources, etc. It can be thought of like a \"hint\" to the model. For example, this information MAY be added to the system prompt."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub instructions: ::std::option::Option<::std::string::String>,
     #[doc = "This result property is reserved by the protocol to allow clients and servers to attach additional metadata to their responses."]
     #[serde(
@@ -2302,7 +2302,7 @@ impl InitializeResult {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct InitializedNotification {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<InitializedNotificationParams>,
 }
 impl From<&InitializedNotification> for InitializedNotification {
@@ -2446,7 +2446,7 @@ pub struct JsonrpcErrorError {
     #[doc = "The error type that occurred."]
     pub code: i64,
     #[doc = "Additional information about the error. The value of this member is defined by the sender (e.g. detailed error information, nested errors etc.)."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub data: ::std::option::Option<::serde_json::Value>,
     #[doc = "A short description of the error. The message SHOULD be limited to a concise single sentence."]
     pub message: ::std::string::String,
@@ -2556,7 +2556,7 @@ impl From<JsonrpcError> for JsonrpcMessage {
 pub struct JsonrpcNotification {
     pub jsonrpc: ::std::string::String,
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<JsonrpcNotificationParams>,
 }
 impl From<&JsonrpcNotification> for JsonrpcNotification {
@@ -2655,7 +2655,7 @@ pub struct JsonrpcRequest {
     pub id: RequestId,
     pub jsonrpc: ::std::string::String,
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<JsonrpcRequestParams>,
 }
 impl From<&JsonrpcRequest> for JsonrpcRequest {
@@ -2695,7 +2695,7 @@ pub struct JsonrpcRequestParams {
     #[serde(
         rename = "_meta",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub meta: ::std::option::Option<JsonrpcRequestParamsMeta>,
 }
@@ -2731,7 +2731,7 @@ pub struct JsonrpcRequestParamsMeta {
     #[serde(
         rename = "progressToken",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub progress_token: ::std::option::Option<ProgressToken>,
 }
@@ -2821,7 +2821,7 @@ impl JsonrpcResponse {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ListPromptsRequest {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<ListPromptsRequestParams>,
 }
 impl From<&ListPromptsRequest> for ListPromptsRequest {
@@ -2853,7 +2853,7 @@ impl ListPromptsRequest {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ListPromptsRequestParams {
     #[doc = "An opaque token representing the current pagination position.\nIf provided, the server should return results starting after this cursor."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub cursor: ::std::option::Option<::std::string::String>,
 }
 impl From<&ListPromptsRequestParams> for ListPromptsRequestParams {
@@ -2910,7 +2910,7 @@ pub struct ListPromptsResult {
     #[serde(
         rename = "nextCursor",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub next_cursor: ::std::option::Option<::std::string::String>,
     pub prompts: ::std::vec::Vec<Prompt>,
@@ -2957,7 +2957,7 @@ impl ListPromptsResult {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ListResourceTemplatesRequest {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<ListResourceTemplatesRequestParams>,
 }
 impl From<&ListResourceTemplatesRequest> for ListResourceTemplatesRequest {
@@ -2989,7 +2989,7 @@ impl ListResourceTemplatesRequest {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ListResourceTemplatesRequestParams {
     #[doc = "An opaque token representing the current pagination position.\nIf provided, the server should return results starting after this cursor."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub cursor: ::std::option::Option<::std::string::String>,
 }
 impl From<&ListResourceTemplatesRequestParams> for ListResourceTemplatesRequestParams {
@@ -3046,7 +3046,7 @@ pub struct ListResourceTemplatesResult {
     #[serde(
         rename = "nextCursor",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub next_cursor: ::std::option::Option<::std::string::String>,
     #[serde(rename = "resourceTemplates")]
@@ -3094,7 +3094,7 @@ impl ListResourceTemplatesResult {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ListResourcesRequest {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<ListResourcesRequestParams>,
 }
 impl From<&ListResourcesRequest> for ListResourcesRequest {
@@ -3126,7 +3126,7 @@ impl ListResourcesRequest {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ListResourcesRequestParams {
     #[doc = "An opaque token representing the current pagination position.\nIf provided, the server should return results starting after this cursor."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub cursor: ::std::option::Option<::std::string::String>,
 }
 impl From<&ListResourcesRequestParams> for ListResourcesRequestParams {
@@ -3183,7 +3183,7 @@ pub struct ListResourcesResult {
     #[serde(
         rename = "nextCursor",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub next_cursor: ::std::option::Option<::std::string::String>,
     pub resources: ::std::vec::Vec<Resource>,
@@ -3236,7 +3236,7 @@ impl ListResourcesResult {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ListRootsRequest {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<ListRootsRequestParams>,
 }
 impl From<&ListRootsRequest> for ListRootsRequest {
@@ -3276,7 +3276,7 @@ pub struct ListRootsRequestParams {
     #[serde(
         rename = "_meta",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub meta: ::std::option::Option<ListRootsRequestParamsMeta>,
 }
@@ -3312,7 +3312,7 @@ pub struct ListRootsRequestParamsMeta {
     #[serde(
         rename = "progressToken",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub progress_token: ::std::option::Option<ProgressToken>,
 }
@@ -3406,7 +3406,7 @@ impl ListRootsResult {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ListToolsRequest {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<ListToolsRequestParams>,
 }
 impl From<&ListToolsRequest> for ListToolsRequest {
@@ -3438,7 +3438,7 @@ impl ListToolsRequest {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ListToolsRequestParams {
     #[doc = "An opaque token representing the current pagination position.\nIf provided, the server should return results starting after this cursor."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub cursor: ::std::option::Option<::std::string::String>,
 }
 impl From<&ListToolsRequestParams> for ListToolsRequestParams {
@@ -3495,7 +3495,7 @@ pub struct ListToolsResult {
     #[serde(
         rename = "nextCursor",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub next_cursor: ::std::option::Option<::std::string::String>,
     pub tools: ::std::vec::Vec<Tool>,
@@ -3708,7 +3708,7 @@ pub struct LoggingMessageNotificationParams {
     #[doc = "The severity of this log message."]
     pub level: LoggingLevel,
     #[doc = "An optional name of the logger issuing this message."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub logger: ::std::option::Option<::std::string::String>,
 }
 impl From<&LoggingMessageNotificationParams> for LoggingMessageNotificationParams {
@@ -3741,7 +3741,7 @@ impl LoggingMessageNotificationParams {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ModelHint {
     #[doc = "A hint for a model name.\n\nThe client SHOULD treat this as a substring of a model name; for example:\n - `claude-3-5-sonnet` should match `claude-3-5-sonnet-20241022`\n - `sonnet` should match `claude-3-5-sonnet-20241022`, `claude-3-sonnet-20240229`, etc.\n - `claude` should match any Claude model\n\nThe client MAY also map the string to a different provider's model name or a different model family, as long as it fills a similar niche; for example:\n - `gemini-1.5-flash` could match `claude-3-haiku-20240307`"]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub name: ::std::option::Option<::std::string::String>,
 }
 impl From<&ModelHint> for ModelHint {
@@ -3797,22 +3797,22 @@ pub struct ModelPreferences {
     #[serde(
         rename = "costPriority",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub cost_priority: ::std::option::Option<f64>,
     #[doc = "Optional hints to use for model selection.\n\nIf multiple hints are specified, the client MUST evaluate them in order\n(such that the first match is taken).\n\nThe client SHOULD prioritize these hints over the numeric priorities, but\nMAY still use the priorities to select from ambiguous matches."]
-    #[serde(default, skip_serializing_if = "std::vec::Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
     pub hints: ::std::vec::Vec<ModelHint>,
     #[serde(
         rename = "intelligencePriority",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub intelligence_priority: ::std::option::Option<f64>,
     #[serde(
         rename = "speedPriority",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub speed_priority: ::std::option::Option<f64>,
 }
@@ -3858,7 +3858,7 @@ impl ModelPreferences {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Notification {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<NotificationParams>,
 }
 impl From<&Notification> for Notification {
@@ -3939,7 +3939,7 @@ impl NotificationParams {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PaginatedRequest {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<PaginatedRequestParams>,
 }
 impl From<&PaginatedRequest> for PaginatedRequest {
@@ -3971,7 +3971,7 @@ impl PaginatedRequest {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PaginatedRequestParams {
     #[doc = "An opaque token representing the current pagination position.\nIf provided, the server should return results starting after this cursor."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub cursor: ::std::option::Option<::std::string::String>,
 }
 impl From<&PaginatedRequestParams> for PaginatedRequestParams {
@@ -4018,7 +4018,7 @@ pub struct PaginatedResult {
     #[serde(
         rename = "nextCursor",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub next_cursor: ::std::option::Option<::std::string::String>,
 }
@@ -4070,7 +4070,7 @@ impl PaginatedResult {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PingRequest {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<PingRequestParams>,
 }
 impl From<&PingRequest> for PingRequest {
@@ -4110,7 +4110,7 @@ pub struct PingRequestParams {
     #[serde(
         rename = "_meta",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub meta: ::std::option::Option<PingRequestParamsMeta>,
 }
@@ -4146,7 +4146,7 @@ pub struct PingRequestParamsMeta {
     #[serde(
         rename = "progressToken",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub progress_token: ::std::option::Option<ProgressToken>,
 }
@@ -4251,7 +4251,7 @@ pub struct ProgressNotificationParams {
     #[doc = "The progress token which was given in the initial request, used to associate this notification with the request that is proceeding."]
     #[serde(rename = "progressToken")]
     pub progress_token: ProgressToken,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub total: ::std::option::Option<f64>,
 }
 impl From<&ProgressNotificationParams> for ProgressNotificationParams {
@@ -4370,10 +4370,10 @@ impl From<i64> for ProgressToken {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Prompt {
     #[doc = "A list of arguments to use for templating the prompt."]
-    #[serde(default, skip_serializing_if = "std::vec::Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
     pub arguments: ::std::vec::Vec<PromptArgument>,
     #[doc = "An optional description of what this prompt provides"]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     #[doc = "The name of the prompt or prompt template."]
     pub name: ::std::string::String,
@@ -4419,12 +4419,12 @@ impl Prompt {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PromptArgument {
     #[doc = "A human-readable description of the argument."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     #[doc = "The name of the argument."]
     pub name: ::std::string::String,
     #[doc = "Whether this argument must be provided."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub required: ::std::option::Option<bool>,
 }
 impl From<&PromptArgument> for PromptArgument {
@@ -4471,7 +4471,7 @@ impl PromptArgument {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct PromptListChangedNotification {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<PromptListChangedNotificationParams>,
 }
 impl From<&PromptListChangedNotification> for PromptListChangedNotification {
@@ -4872,7 +4872,7 @@ impl From<BlobResourceContents> for ReadResourceResultContentsItem {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Request {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<RequestParams>,
 }
 impl From<&Request> for Request {
@@ -4984,7 +4984,7 @@ pub struct RequestParams {
     #[serde(
         rename = "_meta",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub meta: ::std::option::Option<RequestParamsMeta>,
 }
@@ -5020,7 +5020,7 @@ pub struct RequestParamsMeta {
     #[serde(
         rename = "progressToken",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub progress_token: ::std::option::Option<ProgressToken>,
 }
@@ -5088,16 +5088,16 @@ impl RequestParamsMeta {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Resource {
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub annotations: ::std::option::Option<ResourceAnnotations>,
     #[doc = "A description of what this resource represents.\n\nThis can be used by clients to improve the LLM's understanding of available resources. It can be thought of like a \"hint\" to the model."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     #[doc = "The MIME type of this resource, if known."]
     #[serde(
         rename = "mimeType",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub mime_type: ::std::option::Option<::std::string::String>,
     #[doc = "A human-readable name for this resource.\n\nThis can be used by clients to populate UI elements."]
@@ -5143,9 +5143,9 @@ impl Resource {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ResourceAnnotations {
     #[doc = "Describes who the intended customer of this object or data is.\n\nIt can include multiple entries to indicate content useful for multiple audiences (e.g., `[\"user\", \"assistant\"]`)."]
-    #[serde(default, skip_serializing_if = "std::vec::Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
     pub audience: ::std::vec::Vec<Role>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub priority: ::std::option::Option<f64>,
 }
 impl From<&ResourceAnnotations> for ResourceAnnotations {
@@ -5189,7 +5189,7 @@ pub struct ResourceContents {
     #[serde(
         rename = "mimeType",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub mime_type: ::std::option::Option<::std::string::String>,
     #[doc = "The URI of this resource."]
@@ -5239,7 +5239,7 @@ impl ResourceContents {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ResourceListChangedNotification {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<ResourceListChangedNotificationParams>,
 }
 impl From<&ResourceListChangedNotification> for ResourceListChangedNotification {
@@ -5387,16 +5387,16 @@ impl ResourceReference {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ResourceTemplate {
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub annotations: ::std::option::Option<ResourceTemplateAnnotations>,
     #[doc = "A description of what this template is for.\n\nThis can be used by clients to improve the LLM's understanding of available resources. It can be thought of like a \"hint\" to the model."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     #[doc = "The MIME type for all resources that match this template. This should only be included if all resources matching this template have the same type."]
     #[serde(
         rename = "mimeType",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub mime_type: ::std::option::Option<::std::string::String>,
     #[doc = "A human-readable name for the type of resource this template refers to.\n\nThis can be used by clients to populate UI elements."]
@@ -5443,9 +5443,9 @@ impl ResourceTemplate {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ResourceTemplateAnnotations {
     #[doc = "Describes who the intended customer of this object or data is.\n\nIt can include multiple entries to indicate content useful for multiple audiences (e.g., `[\"user\", \"assistant\"]`)."]
-    #[serde(default, skip_serializing_if = "std::vec::Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
     pub audience: ::std::vec::Vec<Role>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub priority: ::std::option::Option<f64>,
 }
 impl From<&ResourceTemplateAnnotations> for ResourceTemplateAnnotations {
@@ -5648,7 +5648,7 @@ impl std::convert::TryFrom<::std::string::String> for Role {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Root {
     #[doc = "An optional name for the root. This can be used to provide a human-readable\nidentifier for the root, which may be useful for display purposes or for\nreferencing the root in other parts of the application."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub name: ::std::option::Option<::std::string::String>,
     #[doc = "The URI identifying the root. This *must* start with file:// for now.\nThis restriction may be relaxed in future versions of the protocol to allow\nother URI schemes."]
     pub uri: ::std::string::String,
@@ -5697,7 +5697,7 @@ impl Root {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct RootsListChangedNotification {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<RootsListChangedNotificationParams>,
 }
 impl From<&RootsListChangedNotification> for RootsListChangedNotification {
@@ -5902,11 +5902,11 @@ pub struct ServerCapabilities {
     #[doc = "Present if the server supports sending log messages to the client."]
     #[serde(default, skip_serializing_if = "::serde_json::Map::is_empty")]
     pub logging: ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub prompts: ::std::option::Option<ServerCapabilitiesPrompts>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub resources: ::std::option::Option<ServerCapabilitiesResources>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub tools: ::std::option::Option<ServerCapabilitiesTools>,
 }
 impl From<&ServerCapabilities> for ServerCapabilities {
@@ -5942,7 +5942,7 @@ pub struct ServerCapabilitiesPrompts {
     #[serde(
         rename = "listChanged",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub list_changed: ::std::option::Option<bool>,
 }
@@ -5983,11 +5983,11 @@ pub struct ServerCapabilitiesResources {
     #[serde(
         rename = "listChanged",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub list_changed: ::std::option::Option<bool>,
     #[doc = "Whether this server supports subscribing to resource updates."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub subscribe: ::std::option::Option<bool>,
 }
 impl From<&ServerCapabilitiesResources> for ServerCapabilitiesResources {
@@ -6023,7 +6023,7 @@ pub struct ServerCapabilitiesTools {
     #[serde(
         rename = "listChanged",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub list_changed: ::std::option::Option<bool>,
 }
@@ -6479,7 +6479,7 @@ impl SubscribeRequestParams {
 #[doc = r" </details>"]
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct TextContent {
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub annotations: ::std::option::Option<TextContentAnnotations>,
     #[doc = "The text content of the message."]
     pub text: ::std::string::String,
@@ -6524,9 +6524,9 @@ impl TextContent {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct TextContentAnnotations {
     #[doc = "Describes who the intended customer of this object or data is.\n\nIt can include multiple entries to indicate content useful for multiple audiences (e.g., `[\"user\", \"assistant\"]`)."]
-    #[serde(default, skip_serializing_if = "std::vec::Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "::std::vec::Vec::is_empty")]
     pub audience: ::std::vec::Vec<Role>,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub priority: ::std::option::Option<f64>,
 }
 impl From<&TextContentAnnotations> for TextContentAnnotations {
@@ -6574,7 +6574,7 @@ pub struct TextResourceContents {
     #[serde(
         rename = "mimeType",
         default,
-        skip_serializing_if = "std::option::Option::is_none"
+        skip_serializing_if = "::std::option::Option::is_none"
     )]
     pub mime_type: ::std::option::Option<::std::string::String>,
     #[doc = "The text of the item. This must only be set if the item can actually be represented as text (not binary data)."]
@@ -6640,7 +6640,7 @@ impl TextResourceContents {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct Tool {
     #[doc = "A human-readable description of the tool."]
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub description: ::std::option::Option<::std::string::String>,
     #[serde(rename = "inputSchema")]
     pub input_schema: ToolInputSchema,
@@ -6738,7 +6738,7 @@ impl ToolInputSchema {
 #[derive(:: serde :: Deserialize, :: serde :: Serialize, Clone, Debug)]
 pub struct ToolListChangedNotification {
     pub method: ::std::string::String,
-    #[serde(default, skip_serializing_if = "std::option::Option::is_none")]
+    #[serde(default, skip_serializing_if = "::std::option::Option::is_none")]
     pub params: ::std::option::Option<ToolListChangedNotificationParams>,
 }
 impl From<&ToolListChangedNotification> for ToolListChangedNotification {
@@ -6877,8 +6877,10 @@ impl UnsubscribeRequestParams {
 pub mod builder {
     #[derive(Clone, Debug)]
     pub struct Annotated {
-        annotations:
-            ::std::result::Result<::std::option::Option<super::AnnotatedAnnotations>, String>,
+        annotations: ::std::result::Result<
+            ::std::option::Option<super::AnnotatedAnnotations>,
+            ::std::string::String,
+        >,
     }
     impl Default for Annotated {
         fn default() -> Self {
@@ -6918,8 +6920,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct AnnotatedAnnotations {
-        audience: ::std::result::Result<::std::vec::Vec<super::Role>, String>,
-        priority: ::std::result::Result<::std::option::Option<f64>, String>,
+        audience: ::std::result::Result<::std::vec::Vec<super::Role>, ::std::string::String>,
+        priority: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
     }
     impl Default for AnnotatedAnnotations {
         fn default() -> Self {
@@ -6972,9 +6974,12 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct BlobResourceContents {
-        blob: ::std::result::Result<::std::string::String, String>,
-        mime_type: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        uri: ::std::result::Result<::std::string::String, String>,
+        blob: ::std::result::Result<::std::string::String, ::std::string::String>,
+        mime_type: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for BlobResourceContents {
         fn default() -> Self {
@@ -7040,8 +7045,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CallToolRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::CallToolRequestParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::CallToolRequestParams, ::std::string::String>,
     }
     impl Default for CallToolRequest {
         fn default() -> Self {
@@ -7096,9 +7101,9 @@ pub mod builder {
     pub struct CallToolRequestParams {
         arguments: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        name: ::std::result::Result<::std::string::String, String>,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for CallToolRequestParams {
         fn default() -> Self {
@@ -7151,11 +7156,14 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CallToolResult {
-        content: ::std::result::Result<::std::vec::Vec<super::CallToolResultContentItem>, String>,
-        is_error: ::std::result::Result<::std::option::Option<bool>, String>,
+        content: ::std::result::Result<
+            ::std::vec::Vec<super::CallToolResultContentItem>,
+            ::std::string::String,
+        >,
+        is_error: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for CallToolResult {
@@ -7222,8 +7230,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CancelledNotification {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::CancelledNotificationParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::CancelledNotificationParams, ::std::string::String>,
     }
     impl Default for CancelledNotification {
         fn default() -> Self {
@@ -7276,8 +7284,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CancelledNotificationParams {
-        reason: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        request_id: ::std::result::Result<super::RequestId, String>,
+        reason: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        request_id: ::std::result::Result<super::RequestId, ::std::string::String>,
     }
     impl Default for CancelledNotificationParams {
         fn default() -> Self {
@@ -7335,12 +7346,15 @@ pub mod builder {
                 ::std::string::String,
                 ::serde_json::Map<::std::string::String, ::serde_json::Value>,
             >,
-            String,
+            ::std::string::String,
         >,
-        roots: ::std::result::Result<::std::option::Option<super::ClientCapabilitiesRoots>, String>,
+        roots: ::std::result::Result<
+            ::std::option::Option<super::ClientCapabilitiesRoots>,
+            ::std::string::String,
+        >,
         sampling: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for ClientCapabilities {
@@ -7412,7 +7426,7 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ClientCapabilitiesRoots {
-        list_changed: ::std::result::Result<::std::option::Option<bool>, String>,
+        list_changed: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
     }
     impl Default for ClientCapabilitiesRoots {
         fn default() -> Self {
@@ -7452,8 +7466,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CompleteRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::CompleteRequestParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::CompleteRequestParams, ::std::string::String>,
     }
     impl Default for CompleteRequest {
         fn default() -> Self {
@@ -7506,8 +7520,9 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CompleteRequestParams {
-        argument: ::std::result::Result<super::CompleteRequestParamsArgument, String>,
-        ref_: ::std::result::Result<super::CompleteRequestParamsRef, String>,
+        argument:
+            ::std::result::Result<super::CompleteRequestParamsArgument, ::std::string::String>,
+        ref_: ::std::result::Result<super::CompleteRequestParamsRef, ::std::string::String>,
     }
     impl Default for CompleteRequestParams {
         fn default() -> Self {
@@ -7560,8 +7575,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CompleteRequestParamsArgument {
-        name: ::std::result::Result<::std::string::String, String>,
-        value: ::std::result::Result<::std::string::String, String>,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
+        value: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for CompleteRequestParamsArgument {
         fn default() -> Self {
@@ -7616,10 +7631,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CompleteResult {
-        completion: ::std::result::Result<super::CompleteResultCompletion, String>,
+        completion: ::std::result::Result<super::CompleteResultCompletion, ::std::string::String>,
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for CompleteResult {
@@ -7673,9 +7688,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CompleteResultCompletion {
-        has_more: ::std::result::Result<::std::option::Option<bool>, String>,
-        total: ::std::result::Result<::std::option::Option<i64>, String>,
-        values: ::std::result::Result<::std::vec::Vec<::std::string::String>, String>,
+        has_more: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
+        total: ::std::result::Result<::std::option::Option<i64>, ::std::string::String>,
+        values:
+            ::std::result::Result<::std::vec::Vec<::std::string::String>, ::std::string::String>,
     }
     impl Default for CompleteResultCompletion {
         fn default() -> Self {
@@ -7741,8 +7757,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CreateMessageRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::CreateMessageRequestParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::CreateMessageRequestParams, ::std::string::String>,
     }
     impl Default for CreateMessageRequest {
         fn default() -> Self {
@@ -7797,19 +7813,26 @@ pub mod builder {
     pub struct CreateMessageRequestParams {
         include_context: ::std::result::Result<
             ::std::option::Option<super::CreateMessageRequestParamsIncludeContext>,
-            String,
+            ::std::string::String,
         >,
-        max_tokens: ::std::result::Result<i64, String>,
-        messages: ::std::result::Result<::std::vec::Vec<super::SamplingMessage>, String>,
+        max_tokens: ::std::result::Result<i64, ::std::string::String>,
+        messages:
+            ::std::result::Result<::std::vec::Vec<super::SamplingMessage>, ::std::string::String>,
         metadata: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        model_preferences:
-            ::std::result::Result<::std::option::Option<super::ModelPreferences>, String>,
-        stop_sequences: ::std::result::Result<::std::vec::Vec<::std::string::String>, String>,
-        system_prompt: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        temperature: ::std::result::Result<::std::option::Option<f64>, String>,
+        model_preferences: ::std::result::Result<
+            ::std::option::Option<super::ModelPreferences>,
+            ::std::string::String,
+        >,
+        stop_sequences:
+            ::std::result::Result<::std::vec::Vec<::std::string::String>, ::std::string::String>,
+        system_prompt: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        temperature: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
     }
     impl Default for CreateMessageRequestParams {
         fn default() -> Self {
@@ -7945,14 +7968,17 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct CreateMessageResult {
-        content: ::std::result::Result<super::CreateMessageResultContent, String>,
+        content: ::std::result::Result<super::CreateMessageResultContent, ::std::string::String>,
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        model: ::std::result::Result<::std::string::String, String>,
-        role: ::std::result::Result<super::Role, String>,
-        stop_reason: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        model: ::std::result::Result<::std::string::String, ::std::string::String>,
+        role: ::std::result::Result<super::Role, ::std::string::String>,
+        stop_reason: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
     }
     impl Default for CreateMessageResult {
         fn default() -> Self {
@@ -8046,10 +8072,10 @@ pub mod builder {
     pub struct EmbeddedResource {
         annotations: ::std::result::Result<
             ::std::option::Option<super::EmbeddedResourceAnnotations>,
-            String,
+            ::std::string::String,
         >,
-        resource: ::std::result::Result<super::EmbeddedResourceResource, String>,
-        type_: ::std::result::Result<::std::string::String, String>,
+        resource: ::std::result::Result<super::EmbeddedResourceResource, ::std::string::String>,
+        type_: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for EmbeddedResource {
         fn default() -> Self {
@@ -8115,8 +8141,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct EmbeddedResourceAnnotations {
-        audience: ::std::result::Result<::std::vec::Vec<super::Role>, String>,
-        priority: ::std::result::Result<::std::option::Option<f64>, String>,
+        audience: ::std::result::Result<::std::vec::Vec<super::Role>, ::std::string::String>,
+        priority: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
     }
     impl Default for EmbeddedResourceAnnotations {
         fn default() -> Self {
@@ -8171,7 +8197,7 @@ pub mod builder {
     pub struct FooResult {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for FooResult {
@@ -8210,8 +8236,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct GetPromptRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::GetPromptRequestParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::GetPromptRequestParams, ::std::string::String>,
     }
     impl Default for GetPromptRequest {
         fn default() -> Self {
@@ -8266,9 +8292,9 @@ pub mod builder {
     pub struct GetPromptRequestParams {
         arguments: ::std::result::Result<
             ::std::collections::HashMap<::std::string::String, ::std::string::String>,
-            String,
+            ::std::string::String,
         >,
-        name: ::std::result::Result<::std::string::String, String>,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for GetPromptRequestParams {
         fn default() -> Self {
@@ -8323,11 +8349,15 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct GetPromptResult {
-        description: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        messages: ::std::result::Result<::std::vec::Vec<super::PromptMessage>, String>,
+        description: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        messages:
+            ::std::result::Result<::std::vec::Vec<super::PromptMessage>, ::std::string::String>,
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for GetPromptResult {
@@ -8394,11 +8424,13 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ImageContent {
-        annotations:
-            ::std::result::Result<::std::option::Option<super::ImageContentAnnotations>, String>,
-        data: ::std::result::Result<::std::string::String, String>,
-        mime_type: ::std::result::Result<::std::string::String, String>,
-        type_: ::std::result::Result<::std::string::String, String>,
+        annotations: ::std::result::Result<
+            ::std::option::Option<super::ImageContentAnnotations>,
+            ::std::string::String,
+        >,
+        data: ::std::result::Result<::std::string::String, ::std::string::String>,
+        mime_type: ::std::result::Result<::std::string::String, ::std::string::String>,
+        type_: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for ImageContent {
         fn default() -> Self {
@@ -8477,8 +8509,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ImageContentAnnotations {
-        audience: ::std::result::Result<::std::vec::Vec<super::Role>, String>,
-        priority: ::std::result::Result<::std::option::Option<f64>, String>,
+        audience: ::std::result::Result<::std::vec::Vec<super::Role>, ::std::string::String>,
+        priority: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
     }
     impl Default for ImageContentAnnotations {
         fn default() -> Self {
@@ -8531,8 +8563,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct Implementation {
-        name: ::std::result::Result<::std::string::String, String>,
-        version: ::std::result::Result<::std::string::String, String>,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
+        version: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for Implementation {
         fn default() -> Self {
@@ -8585,8 +8617,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct InitializeRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::InitializeRequestParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::InitializeRequestParams, ::std::string::String>,
     }
     impl Default for InitializeRequest {
         fn default() -> Self {
@@ -8639,9 +8671,9 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct InitializeRequestParams {
-        capabilities: ::std::result::Result<super::ClientCapabilities, String>,
-        client_info: ::std::result::Result<super::Implementation, String>,
-        protocol_version: ::std::result::Result<::std::string::String, String>,
+        capabilities: ::std::result::Result<super::ClientCapabilities, ::std::string::String>,
+        client_info: ::std::result::Result<super::Implementation, ::std::string::String>,
+        protocol_version: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for InitializeRequestParams {
         fn default() -> Self {
@@ -8710,14 +8742,17 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct InitializeResult {
-        capabilities: ::std::result::Result<super::ServerCapabilities, String>,
-        instructions: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        capabilities: ::std::result::Result<super::ServerCapabilities, ::std::string::String>,
+        instructions: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        protocol_version: ::std::result::Result<::std::string::String, String>,
-        server_info: ::std::result::Result<super::Implementation, String>,
+        protocol_version: ::std::result::Result<::std::string::String, ::std::string::String>,
+        server_info: ::std::result::Result<super::Implementation, ::std::string::String>,
     }
     impl Default for InitializeResult {
         fn default() -> Self {
@@ -8812,10 +8847,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct InitializedNotification {
-        method: ::std::result::Result<::std::string::String, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
         params: ::std::result::Result<
             ::std::option::Option<super::InitializedNotificationParams>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for InitializedNotification {
@@ -8871,7 +8906,7 @@ pub mod builder {
     pub struct InitializedNotificationParams {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for InitializedNotificationParams {
@@ -8912,9 +8947,9 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct JsonrpcError {
-        error: ::std::result::Result<super::JsonrpcErrorError, String>,
-        id: ::std::result::Result<super::RequestId, String>,
-        jsonrpc: ::std::result::Result<::std::string::String, String>,
+        error: ::std::result::Result<super::JsonrpcErrorError, ::std::string::String>,
+        id: ::std::result::Result<super::RequestId, ::std::string::String>,
+        jsonrpc: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for JsonrpcError {
         fn default() -> Self {
@@ -8980,9 +9015,12 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct JsonrpcErrorError {
-        code: ::std::result::Result<i64, String>,
-        data: ::std::result::Result<::std::option::Option<::serde_json::Value>, String>,
-        message: ::std::result::Result<::std::string::String, String>,
+        code: ::std::result::Result<i64, ::std::string::String>,
+        data: ::std::result::Result<
+            ::std::option::Option<::serde_json::Value>,
+            ::std::string::String,
+        >,
+        message: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for JsonrpcErrorError {
         fn default() -> Self {
@@ -9048,10 +9086,12 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct JsonrpcNotification {
-        jsonrpc: ::std::result::Result<::std::string::String, String>,
-        method: ::std::result::Result<::std::string::String, String>,
-        params:
-            ::std::result::Result<::std::option::Option<super::JsonrpcNotificationParams>, String>,
+        jsonrpc: ::std::result::Result<::std::string::String, ::std::string::String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::JsonrpcNotificationParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for JsonrpcNotification {
         fn default() -> Self {
@@ -9119,7 +9159,7 @@ pub mod builder {
     pub struct JsonrpcNotificationParams {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for JsonrpcNotificationParams {
@@ -9158,10 +9198,13 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct JsonrpcRequest {
-        id: ::std::result::Result<super::RequestId, String>,
-        jsonrpc: ::std::result::Result<::std::string::String, String>,
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<::std::option::Option<super::JsonrpcRequestParams>, String>,
+        id: ::std::result::Result<super::RequestId, ::std::string::String>,
+        jsonrpc: ::std::result::Result<::std::string::String, ::std::string::String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::JsonrpcRequestParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for JsonrpcRequest {
         fn default() -> Self {
@@ -9240,7 +9283,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct JsonrpcRequestParams {
-        meta: ::std::result::Result<::std::option::Option<super::JsonrpcRequestParamsMeta>, String>,
+        meta: ::std::result::Result<
+            ::std::option::Option<super::JsonrpcRequestParamsMeta>,
+            ::std::string::String,
+        >,
     }
     impl Default for JsonrpcRequestParams {
         fn default() -> Self {
@@ -9278,7 +9324,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct JsonrpcRequestParamsMeta {
-        progress_token: ::std::result::Result<::std::option::Option<super::ProgressToken>, String>,
+        progress_token: ::std::result::Result<
+            ::std::option::Option<super::ProgressToken>,
+            ::std::string::String,
+        >,
     }
     impl Default for JsonrpcRequestParamsMeta {
         fn default() -> Self {
@@ -9318,9 +9367,9 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct JsonrpcResponse {
-        id: ::std::result::Result<super::RequestId, String>,
-        jsonrpc: ::std::result::Result<::std::string::String, String>,
-        result: ::std::result::Result<super::FooResult, String>,
+        id: ::std::result::Result<super::RequestId, ::std::string::String>,
+        jsonrpc: ::std::result::Result<::std::string::String, ::std::string::String>,
+        result: ::std::result::Result<super::FooResult, ::std::string::String>,
     }
     impl Default for JsonrpcResponse {
         fn default() -> Self {
@@ -9386,9 +9435,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListPromptsRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params:
-            ::std::result::Result<::std::option::Option<super::ListPromptsRequestParams>, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::ListPromptsRequestParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListPromptsRequest {
         fn default() -> Self {
@@ -9441,7 +9492,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListPromptsRequestParams {
-        cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListPromptsRequestParams {
         fn default() -> Self {
@@ -9483,10 +9537,13 @@ pub mod builder {
     pub struct ListPromptsResult {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        next_cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        prompts: ::std::result::Result<::std::vec::Vec<super::Prompt>, String>,
+        next_cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        prompts: ::std::result::Result<::std::vec::Vec<super::Prompt>, ::std::string::String>,
     }
     impl Default for ListPromptsResult {
         fn default() -> Self {
@@ -9552,10 +9609,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListResourceTemplatesRequest {
-        method: ::std::result::Result<::std::string::String, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
         params: ::std::result::Result<
             ::std::option::Option<super::ListResourceTemplatesRequestParams>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for ListResourceTemplatesRequest {
@@ -9611,7 +9668,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListResourceTemplatesRequestParams {
-        cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListResourceTemplatesRequestParams {
         fn default() -> Self {
@@ -9655,10 +9715,14 @@ pub mod builder {
     pub struct ListResourceTemplatesResult {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        next_cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        resource_templates: ::std::result::Result<::std::vec::Vec<super::ResourceTemplate>, String>,
+        next_cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        resource_templates:
+            ::std::result::Result<::std::vec::Vec<super::ResourceTemplate>, ::std::string::String>,
     }
     impl Default for ListResourceTemplatesResult {
         fn default() -> Self {
@@ -9727,9 +9791,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListResourcesRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params:
-            ::std::result::Result<::std::option::Option<super::ListResourcesRequestParams>, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::ListResourcesRequestParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListResourcesRequest {
         fn default() -> Self {
@@ -9782,7 +9848,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListResourcesRequestParams {
-        cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListResourcesRequestParams {
         fn default() -> Self {
@@ -9824,10 +9893,13 @@ pub mod builder {
     pub struct ListResourcesResult {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        next_cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        resources: ::std::result::Result<::std::vec::Vec<super::Resource>, String>,
+        next_cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        resources: ::std::result::Result<::std::vec::Vec<super::Resource>, ::std::string::String>,
     }
     impl Default for ListResourcesResult {
         fn default() -> Self {
@@ -9893,8 +9965,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListRootsRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<::std::option::Option<super::ListRootsRequestParams>, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::ListRootsRequestParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListRootsRequest {
         fn default() -> Self {
@@ -9947,8 +10022,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListRootsRequestParams {
-        meta:
-            ::std::result::Result<::std::option::Option<super::ListRootsRequestParamsMeta>, String>,
+        meta: ::std::result::Result<
+            ::std::option::Option<super::ListRootsRequestParamsMeta>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListRootsRequestParams {
         fn default() -> Self {
@@ -9986,7 +10063,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListRootsRequestParamsMeta {
-        progress_token: ::std::result::Result<::std::option::Option<super::ProgressToken>, String>,
+        progress_token: ::std::result::Result<
+            ::std::option::Option<super::ProgressToken>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListRootsRequestParamsMeta {
         fn default() -> Self {
@@ -10028,9 +10108,9 @@ pub mod builder {
     pub struct ListRootsResult {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        roots: ::std::result::Result<::std::vec::Vec<super::Root>, String>,
+        roots: ::std::result::Result<::std::vec::Vec<super::Root>, ::std::string::String>,
     }
     impl Default for ListRootsResult {
         fn default() -> Self {
@@ -10083,8 +10163,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListToolsRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<::std::option::Option<super::ListToolsRequestParams>, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::ListToolsRequestParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListToolsRequest {
         fn default() -> Self {
@@ -10137,7 +10220,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ListToolsRequestParams {
-        cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
     }
     impl Default for ListToolsRequestParams {
         fn default() -> Self {
@@ -10179,10 +10265,13 @@ pub mod builder {
     pub struct ListToolsResult {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        next_cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        tools: ::std::result::Result<::std::vec::Vec<super::Tool>, String>,
+        next_cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        tools: ::std::result::Result<::std::vec::Vec<super::Tool>, ::std::string::String>,
     }
     impl Default for ListToolsResult {
         fn default() -> Self {
@@ -10248,8 +10337,9 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct LoggingMessageNotification {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::LoggingMessageNotificationParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params:
+            ::std::result::Result<super::LoggingMessageNotificationParams, ::std::string::String>,
     }
     impl Default for LoggingMessageNotification {
         fn default() -> Self {
@@ -10302,9 +10392,12 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct LoggingMessageNotificationParams {
-        data: ::std::result::Result<::serde_json::Value, String>,
-        level: ::std::result::Result<super::LoggingLevel, String>,
-        logger: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        data: ::std::result::Result<::serde_json::Value, ::std::string::String>,
+        level: ::std::result::Result<super::LoggingLevel, ::std::string::String>,
+        logger: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
     }
     impl Default for LoggingMessageNotificationParams {
         fn default() -> Self {
@@ -10372,7 +10465,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ModelHint {
-        name: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        name: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
     }
     impl Default for ModelHint {
         fn default() -> Self {
@@ -10410,10 +10506,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ModelPreferences {
-        cost_priority: ::std::result::Result<::std::option::Option<f64>, String>,
-        hints: ::std::result::Result<::std::vec::Vec<super::ModelHint>, String>,
-        intelligence_priority: ::std::result::Result<::std::option::Option<f64>, String>,
-        speed_priority: ::std::result::Result<::std::option::Option<f64>, String>,
+        cost_priority: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
+        hints: ::std::result::Result<::std::vec::Vec<super::ModelHint>, ::std::string::String>,
+        intelligence_priority:
+            ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
+        speed_priority: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
     }
     impl Default for ModelPreferences {
         fn default() -> Self {
@@ -10495,8 +10592,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct Notification {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<::std::option::Option<super::NotificationParams>, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::NotificationParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for Notification {
         fn default() -> Self {
@@ -10551,7 +10651,7 @@ pub mod builder {
     pub struct NotificationParams {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for NotificationParams {
@@ -10590,8 +10690,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PaginatedRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<::std::option::Option<super::PaginatedRequestParams>, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::PaginatedRequestParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for PaginatedRequest {
         fn default() -> Self {
@@ -10644,7 +10747,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PaginatedRequestParams {
-        cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
     }
     impl Default for PaginatedRequestParams {
         fn default() -> Self {
@@ -10686,9 +10792,12 @@ pub mod builder {
     pub struct PaginatedResult {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        next_cursor: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
+        next_cursor: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
     }
     impl Default for PaginatedResult {
         fn default() -> Self {
@@ -10741,8 +10850,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PingRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<::std::option::Option<super::PingRequestParams>, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::PingRequestParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for PingRequest {
         fn default() -> Self {
@@ -10795,7 +10907,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PingRequestParams {
-        meta: ::std::result::Result<::std::option::Option<super::PingRequestParamsMeta>, String>,
+        meta: ::std::result::Result<
+            ::std::option::Option<super::PingRequestParamsMeta>,
+            ::std::string::String,
+        >,
     }
     impl Default for PingRequestParams {
         fn default() -> Self {
@@ -10833,7 +10948,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PingRequestParamsMeta {
-        progress_token: ::std::result::Result<::std::option::Option<super::ProgressToken>, String>,
+        progress_token: ::std::result::Result<
+            ::std::option::Option<super::ProgressToken>,
+            ::std::string::String,
+        >,
     }
     impl Default for PingRequestParamsMeta {
         fn default() -> Self {
@@ -10873,8 +10991,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ProgressNotification {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::ProgressNotificationParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::ProgressNotificationParams, ::std::string::String>,
     }
     impl Default for ProgressNotification {
         fn default() -> Self {
@@ -10927,9 +11045,9 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ProgressNotificationParams {
-        progress: ::std::result::Result<f64, String>,
-        progress_token: ::std::result::Result<super::ProgressToken, String>,
-        total: ::std::result::Result<::std::option::Option<f64>, String>,
+        progress: ::std::result::Result<f64, ::std::string::String>,
+        progress_token: ::std::result::Result<super::ProgressToken, ::std::string::String>,
+        total: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
     }
     impl Default for ProgressNotificationParams {
         fn default() -> Self {
@@ -10995,9 +11113,13 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct Prompt {
-        arguments: ::std::result::Result<::std::vec::Vec<super::PromptArgument>, String>,
-        description: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        name: ::std::result::Result<::std::string::String, String>,
+        arguments:
+            ::std::result::Result<::std::vec::Vec<super::PromptArgument>, ::std::string::String>,
+        description: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for Prompt {
         fn default() -> Self {
@@ -11061,9 +11183,12 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PromptArgument {
-        description: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        name: ::std::result::Result<::std::string::String, String>,
-        required: ::std::result::Result<::std::option::Option<bool>, String>,
+        description: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
+        required: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
     }
     impl Default for PromptArgument {
         fn default() -> Self {
@@ -11129,10 +11254,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PromptListChangedNotification {
-        method: ::std::result::Result<::std::string::String, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
         params: ::std::result::Result<
             ::std::option::Option<super::PromptListChangedNotificationParams>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for PromptListChangedNotification {
@@ -11192,7 +11317,7 @@ pub mod builder {
     pub struct PromptListChangedNotificationParams {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for PromptListChangedNotificationParams {
@@ -11233,8 +11358,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PromptMessage {
-        content: ::std::result::Result<super::PromptMessageContent, String>,
-        role: ::std::result::Result<super::Role, String>,
+        content: ::std::result::Result<super::PromptMessageContent, ::std::string::String>,
+        role: ::std::result::Result<super::Role, ::std::string::String>,
     }
     impl Default for PromptMessage {
         fn default() -> Self {
@@ -11287,8 +11412,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct PromptReference {
-        name: ::std::result::Result<::std::string::String, String>,
-        type_: ::std::result::Result<::std::string::String, String>,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
+        type_: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for PromptReference {
         fn default() -> Self {
@@ -11341,8 +11466,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ReadResourceRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::ReadResourceRequestParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::ReadResourceRequestParams, ::std::string::String>,
     }
     impl Default for ReadResourceRequest {
         fn default() -> Self {
@@ -11395,7 +11520,7 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ReadResourceRequestParams {
-        uri: ::std::result::Result<::std::string::String, String>,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for ReadResourceRequestParams {
         fn default() -> Self {
@@ -11431,11 +11556,13 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ReadResourceResult {
-        contents:
-            ::std::result::Result<::std::vec::Vec<super::ReadResourceResultContentsItem>, String>,
+        contents: ::std::result::Result<
+            ::std::vec::Vec<super::ReadResourceResultContentsItem>,
+            ::std::string::String,
+        >,
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for ReadResourceResult {
@@ -11489,8 +11616,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct Request {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<::std::option::Option<super::RequestParams>, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<
+            ::std::option::Option<super::RequestParams>,
+            ::std::string::String,
+        >,
     }
     impl Default for Request {
         fn default() -> Self {
@@ -11541,7 +11671,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct RequestParams {
-        meta: ::std::result::Result<::std::option::Option<super::RequestParamsMeta>, String>,
+        meta: ::std::result::Result<
+            ::std::option::Option<super::RequestParamsMeta>,
+            ::std::string::String,
+        >,
     }
     impl Default for RequestParams {
         fn default() -> Self {
@@ -11579,7 +11712,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct RequestParamsMeta {
-        progress_token: ::std::result::Result<::std::option::Option<super::ProgressToken>, String>,
+        progress_token: ::std::result::Result<
+            ::std::option::Option<super::ProgressToken>,
+            ::std::string::String,
+        >,
     }
     impl Default for RequestParamsMeta {
         fn default() -> Self {
@@ -11619,12 +11755,20 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct Resource {
-        annotations:
-            ::std::result::Result<::std::option::Option<super::ResourceAnnotations>, String>,
-        description: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        mime_type: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        name: ::std::result::Result<::std::string::String, String>,
-        uri: ::std::result::Result<::std::string::String, String>,
+        annotations: ::std::result::Result<
+            ::std::option::Option<super::ResourceAnnotations>,
+            ::std::string::String,
+        >,
+        description: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        mime_type: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for Resource {
         fn default() -> Self {
@@ -11714,8 +11858,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ResourceAnnotations {
-        audience: ::std::result::Result<::std::vec::Vec<super::Role>, String>,
-        priority: ::std::result::Result<::std::option::Option<f64>, String>,
+        audience: ::std::result::Result<::std::vec::Vec<super::Role>, ::std::string::String>,
+        priority: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
     }
     impl Default for ResourceAnnotations {
         fn default() -> Self {
@@ -11768,8 +11912,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ResourceContents {
-        mime_type: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        uri: ::std::result::Result<::std::string::String, String>,
+        mime_type: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for ResourceContents {
         fn default() -> Self {
@@ -11822,10 +11969,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ResourceListChangedNotification {
-        method: ::std::result::Result<::std::string::String, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
         params: ::std::result::Result<
             ::std::option::Option<super::ResourceListChangedNotificationParams>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for ResourceListChangedNotification {
@@ -11885,7 +12032,7 @@ pub mod builder {
     pub struct ResourceListChangedNotificationParams {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for ResourceListChangedNotificationParams {
@@ -11926,8 +12073,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ResourceReference {
-        type_: ::std::result::Result<::std::string::String, String>,
-        uri: ::std::result::Result<::std::string::String, String>,
+        type_: ::std::result::Result<::std::string::String, ::std::string::String>,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for ResourceReference {
         fn default() -> Self {
@@ -11982,12 +12129,18 @@ pub mod builder {
     pub struct ResourceTemplate {
         annotations: ::std::result::Result<
             ::std::option::Option<super::ResourceTemplateAnnotations>,
-            String,
+            ::std::string::String,
         >,
-        description: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        mime_type: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        name: ::std::result::Result<::std::string::String, String>,
-        uri_template: ::std::result::Result<::std::string::String, String>,
+        description: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        mime_type: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
+        uri_template: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for ResourceTemplate {
         fn default() -> Self {
@@ -12079,8 +12232,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ResourceTemplateAnnotations {
-        audience: ::std::result::Result<::std::vec::Vec<super::Role>, String>,
-        priority: ::std::result::Result<::std::option::Option<f64>, String>,
+        audience: ::std::result::Result<::std::vec::Vec<super::Role>, ::std::string::String>,
+        priority: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
     }
     impl Default for ResourceTemplateAnnotations {
         fn default() -> Self {
@@ -12133,8 +12286,9 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ResourceUpdatedNotification {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::ResourceUpdatedNotificationParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params:
+            ::std::result::Result<super::ResourceUpdatedNotificationParams, ::std::string::String>,
     }
     impl Default for ResourceUpdatedNotification {
         fn default() -> Self {
@@ -12187,7 +12341,7 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ResourceUpdatedNotificationParams {
-        uri: ::std::result::Result<::std::string::String, String>,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for ResourceUpdatedNotificationParams {
         fn default() -> Self {
@@ -12225,8 +12379,11 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct Root {
-        name: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        uri: ::std::result::Result<::std::string::String, String>,
+        name: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for Root {
         fn default() -> Self {
@@ -12277,10 +12434,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct RootsListChangedNotification {
-        method: ::std::result::Result<::std::string::String, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
         params: ::std::result::Result<
             ::std::option::Option<super::RootsListChangedNotificationParams>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for RootsListChangedNotification {
@@ -12338,7 +12495,7 @@ pub mod builder {
     pub struct RootsListChangedNotificationParams {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for RootsListChangedNotificationParams {
@@ -12379,8 +12536,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct SamplingMessage {
-        content: ::std::result::Result<super::SamplingMessageContent, String>,
-        role: ::std::result::Result<super::Role, String>,
+        content: ::std::result::Result<super::SamplingMessageContent, ::std::string::String>,
+        role: ::std::result::Result<super::Role, ::std::string::String>,
     }
     impl Default for SamplingMessage {
         fn default() -> Self {
@@ -12438,19 +12595,24 @@ pub mod builder {
                 ::std::string::String,
                 ::serde_json::Map<::std::string::String, ::serde_json::Value>,
             >,
-            String,
+            ::std::string::String,
         >,
         logging: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
-        prompts:
-            ::std::result::Result<::std::option::Option<super::ServerCapabilitiesPrompts>, String>,
+        prompts: ::std::result::Result<
+            ::std::option::Option<super::ServerCapabilitiesPrompts>,
+            ::std::string::String,
+        >,
         resources: ::std::result::Result<
             ::std::option::Option<super::ServerCapabilitiesResources>,
-            String,
+            ::std::string::String,
         >,
-        tools: ::std::result::Result<::std::option::Option<super::ServerCapabilitiesTools>, String>,
+        tools: ::std::result::Result<
+            ::std::option::Option<super::ServerCapabilitiesTools>,
+            ::std::string::String,
+        >,
     }
     impl Default for ServerCapabilities {
         fn default() -> Self {
@@ -12547,7 +12709,7 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ServerCapabilitiesPrompts {
-        list_changed: ::std::result::Result<::std::option::Option<bool>, String>,
+        list_changed: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
     }
     impl Default for ServerCapabilitiesPrompts {
         fn default() -> Self {
@@ -12587,8 +12749,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ServerCapabilitiesResources {
-        list_changed: ::std::result::Result<::std::option::Option<bool>, String>,
-        subscribe: ::std::result::Result<::std::option::Option<bool>, String>,
+        list_changed: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
+        subscribe: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
     }
     impl Default for ServerCapabilitiesResources {
         fn default() -> Self {
@@ -12641,7 +12803,7 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ServerCapabilitiesTools {
-        list_changed: ::std::result::Result<::std::option::Option<bool>, String>,
+        list_changed: ::std::result::Result<::std::option::Option<bool>, ::std::string::String>,
     }
     impl Default for ServerCapabilitiesTools {
         fn default() -> Self {
@@ -12681,8 +12843,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct SetLevelRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::SetLevelRequestParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::SetLevelRequestParams, ::std::string::String>,
     }
     impl Default for SetLevelRequest {
         fn default() -> Self {
@@ -12735,7 +12897,7 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct SetLevelRequestParams {
-        level: ::std::result::Result<super::LoggingLevel, String>,
+        level: ::std::result::Result<super::LoggingLevel, ::std::string::String>,
     }
     impl Default for SetLevelRequestParams {
         fn default() -> Self {
@@ -12775,8 +12937,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct SubscribeRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::SubscribeRequestParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::SubscribeRequestParams, ::std::string::String>,
     }
     impl Default for SubscribeRequest {
         fn default() -> Self {
@@ -12829,7 +12991,7 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct SubscribeRequestParams {
-        uri: ::std::result::Result<::std::string::String, String>,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for SubscribeRequestParams {
         fn default() -> Self {
@@ -12865,10 +13027,12 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct TextContent {
-        annotations:
-            ::std::result::Result<::std::option::Option<super::TextContentAnnotations>, String>,
-        text: ::std::result::Result<::std::string::String, String>,
-        type_: ::std::result::Result<::std::string::String, String>,
+        annotations: ::std::result::Result<
+            ::std::option::Option<super::TextContentAnnotations>,
+            ::std::string::String,
+        >,
+        text: ::std::result::Result<::std::string::String, ::std::string::String>,
+        type_: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for TextContent {
         fn default() -> Self {
@@ -12934,8 +13098,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct TextContentAnnotations {
-        audience: ::std::result::Result<::std::vec::Vec<super::Role>, String>,
-        priority: ::std::result::Result<::std::option::Option<f64>, String>,
+        audience: ::std::result::Result<::std::vec::Vec<super::Role>, ::std::string::String>,
+        priority: ::std::result::Result<::std::option::Option<f64>, ::std::string::String>,
     }
     impl Default for TextContentAnnotations {
         fn default() -> Self {
@@ -12988,9 +13152,12 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct TextResourceContents {
-        mime_type: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        text: ::std::result::Result<::std::string::String, String>,
-        uri: ::std::result::Result<::std::string::String, String>,
+        mime_type: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        text: ::std::result::Result<::std::string::String, ::std::string::String>,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for TextResourceContents {
         fn default() -> Self {
@@ -13056,9 +13223,12 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct Tool {
-        description: ::std::result::Result<::std::option::Option<::std::string::String>, String>,
-        input_schema: ::std::result::Result<super::ToolInputSchema, String>,
-        name: ::std::result::Result<::std::string::String, String>,
+        description: ::std::result::Result<
+            ::std::option::Option<::std::string::String>,
+            ::std::string::String,
+        >,
+        input_schema: ::std::result::Result<super::ToolInputSchema, ::std::string::String>,
+        name: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for Tool {
         fn default() -> Self {
@@ -13127,9 +13297,9 @@ pub mod builder {
                 ::std::string::String,
                 ::serde_json::Map<::std::string::String, ::serde_json::Value>,
             >,
-            String,
+            ::std::string::String,
         >,
-        type_: ::std::result::Result<::std::string::String, String>,
+        type_: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for ToolInputSchema {
         fn default() -> Self {
@@ -13187,10 +13357,10 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct ToolListChangedNotification {
-        method: ::std::result::Result<::std::string::String, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
         params: ::std::result::Result<
             ::std::option::Option<super::ToolListChangedNotificationParams>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for ToolListChangedNotification {
@@ -13248,7 +13418,7 @@ pub mod builder {
     pub struct ToolListChangedNotificationParams {
         meta: ::std::result::Result<
             ::serde_json::Map<::std::string::String, ::serde_json::Value>,
-            String,
+            ::std::string::String,
         >,
     }
     impl Default for ToolListChangedNotificationParams {
@@ -13289,8 +13459,8 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct UnsubscribeRequest {
-        method: ::std::result::Result<::std::string::String, String>,
-        params: ::std::result::Result<super::UnsubscribeRequestParams, String>,
+        method: ::std::result::Result<::std::string::String, ::std::string::String>,
+        params: ::std::result::Result<super::UnsubscribeRequestParams, ::std::string::String>,
     }
     impl Default for UnsubscribeRequest {
         fn default() -> Self {
@@ -13343,7 +13513,7 @@ pub mod builder {
     }
     #[derive(Clone, Debug)]
     pub struct UnsubscribeRequestParams {
-        uri: ::std::result::Result<::std::string::String, String>,
+        uri: ::std::result::Result<::std::string::String, ::std::string::String>,
     }
     impl Default for UnsubscribeRequestParams {
         fn default() -> Self {
