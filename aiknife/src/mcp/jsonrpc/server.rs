@@ -1,10 +1,9 @@
 //! JSON RPC implementation that's specific to JSON RPC servers
-use std::borrow::Cow;
-
 use super::{
     GenericResponse, Id, JsonRpcClientMessage, JsonRpcError, Notification, Request, Response,
     ResponsePayload,
 };
+use std::borrow::Cow;
 use tracing::*;
 
 /// A JSON-RPC service that can handle incoming connections and requests, with as little coupling
@@ -225,4 +224,210 @@ pub(crate) fn expect_params<P: serde::de::DeserializeOwned>(
         error!(error = %e, params = params.get(), "Error deserializing params");
         JsonRpcError::invalid_params(id.clone().into_owned())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use expectorate::assert_contents;
+    use serde_json::json;
+
+    // Mock connection handler for testing
+    struct MockHandler;
+
+    #[async_trait::async_trait]
+    impl JsonRpcConnectionHandler for MockHandler {
+        async fn handle_method<'a>(
+            &self,
+            id: Id<'a>,
+            method: Cow<'a, str>,
+            params: Option<&'a serde_json::value::RawValue>,
+        ) -> Result<serde_json::Value, JsonRpcError> {
+            match method.as_ref() {
+                "echo" => {
+                    let params = expect_params::<serde_json::Value>(&id, params)?;
+                    Ok(params)
+                }
+                "add" => {
+                    #[derive(serde::Deserialize)]
+                    struct AddParams {
+                        a: i32,
+                        b: i32,
+                    }
+                    let params = expect_params::<AddParams>(&id, params)?;
+                    Ok(json!(params.a + params.b))
+                }
+                "error" => Err(JsonRpcError::internal_anyhow_error(
+                    id.into_owned(),
+                    anyhow::anyhow!("Test error!"),
+                )),
+                unknown => Err(JsonRpcError::method_not_found(
+                    unknown.to_string(),
+                    id.into_owned(),
+                )),
+            }
+        }
+
+        async fn handle_notification<'a>(
+            &self,
+            method: Cow<'a, str>,
+            _params: Option<&'a serde_json::value::RawValue>,
+        ) -> Result<(), JsonRpcError> {
+            match method.as_ref() {
+                "notify" => Ok(()),
+                unknown => Err(JsonRpcError::method_not_found(
+                    unknown.to_string(),
+                    Id::Null,
+                )),
+            }
+        }
+    }
+
+    // Helper function to create a server connection for testing
+    fn create_test_connection() -> JsonRpcServerConnection<MockHandler> {
+        JsonRpcServerConnection::new(MockHandler)
+    }
+
+    async fn assert_response(request: &str, test_name: &str) {
+        let conn = create_test_connection();
+        let response = match conn.handle_request(request.to_string()).await {
+            Ok(response) => response,
+            Err(err) => err,
+        };
+
+        // Parse and re-serialize to normalize field order and whitespace
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        let normalized = serde_json::to_string_pretty(&parsed).unwrap();
+
+        assert_contents(
+            format!("src/mcp/jsonrpc/testdata/{}.json", test_name),
+            &normalized,
+        );
+    }
+
+    #[tokio::test]
+    async fn test_valid_request() {
+        // Test echo method
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "echo", "params": "hello", "id": 1}"#,
+            "echo_response",
+        )
+        .await;
+
+        // Test add method
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "add", "params": {"a": 2, "b": 3}, "id": 2}"#,
+            "add_response",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_notification() {
+        // Test valid notification
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "notify"}"#,
+            "notify_response",
+        )
+        .await;
+
+        // Test invalid notification method
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "invalid_notify"}"#,
+            "invalid_notify_response",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_error_cases() {
+        // Test method not found
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "definitetly_non_existent", "id": 1}"#,
+            "method_not_found_response",
+        )
+        .await;
+
+        // Test invalid params
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "add", "params": "invalid", "id": 2}"#,
+            "invalid_params_response",
+        )
+        .await;
+
+        // Test reporting of an internal server error
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "error", "id": 3}"#,
+            "internal_error_response",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_invalid_requests() {
+        // Test invalid JSON
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "echo", "id": 1"#,
+            "invalid_json_response",
+        )
+        .await;
+
+        // Test missing jsonrpc version
+        assert_response(r#"{"method": "echo", "id": 1}"#, "missing_version_response").await;
+
+        // Test invalid version
+        assert_response(
+            r#"{"jsonrpc": "1.0", "method": "echo", "id": 1}"#,
+            "invalid_version_response",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_id_types() {
+        // Test numeric id
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "echo", "params": "test", "id": 1}"#,
+            "numeric_id_response",
+        )
+        .await;
+
+        // Test string id
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "echo", "params": "test", "id": "abc"}"#,
+            "string_id_response",
+        )
+        .await;
+
+        // Test null id
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "echo", "params": "test", "id": null}"#,
+            "null_id_response",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn test_params_variations() {
+        // Test with array params
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "echo", "params": [1,2,3], "id": 1}"#,
+            "array_params_response",
+        )
+        .await;
+
+        // Test with object params
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "echo", "params": {"key": "value"}, "id": 2}"#,
+            "object_params_response",
+        )
+        .await;
+
+        // Test with no params
+        assert_response(
+            r#"{"jsonrpc": "2.0", "method": "echo", "id": 3}"#,
+            "no_params_response",
+        )
+        .await;
+    }
 }

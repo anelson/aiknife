@@ -105,6 +105,22 @@ impl JsonRpcError {
         Self::new(code, message, id, data)
     }
 
+    /// Make a new JSON RPC error, capturing the source error chain from Anyhow
+    fn from_anyhow_error(
+        code: jsonrpc::ErrorCode,
+        error: anyhow::Error,
+        id: impl Into<Option<jsonrpc::Id<'static>>>,
+    ) -> Self {
+        let message = error.to_string();
+        let data = error
+            .chain()
+            .skip(1) // Skip the first error since it's already in the message
+            .map(|e| e.to_string())
+            .collect();
+
+        Self::new(code, message, id, Some(data))
+    }
+
     /// Error deserializing some JSON.
     pub(crate) fn deser(
         error: serde_json::Error,
@@ -143,6 +159,14 @@ impl JsonRpcError {
             id,
             None,
         )
+    }
+
+    pub(crate) fn internal_error(id: jsonrpc::Id<'static>, err: impl std::error::Error) -> Self {
+        Self::from_error(jsonrpc::ErrorCode::InternalError, err, id)
+    }
+
+    pub(crate) fn internal_anyhow_error(id: jsonrpc::Id<'static>, err: anyhow::Error) -> Self {
+        Self::from_anyhow_error(jsonrpc::ErrorCode::InternalError, err, id)
     }
 }
 

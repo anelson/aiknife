@@ -23,6 +23,7 @@ crossbeam          = { version = "0.8.4", features = ["crossbeam-channel"] }
 ctrlc              = "3.4.5"
 either             = "1.13.0"
 expect-test        = "1.5.0"
+expectorate        = "1.1.0"
 fancy-regex        = "0.11.0"
 futures            = "0.3"
 itertools          = "0.13.0"
