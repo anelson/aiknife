@@ -1,7 +1,8 @@
 //! JSON RPC implementation that's specific to JSON RPC servers
+use super::shared as jsonrpc;
 use super::{
-    GenericResponse, Id, JsonRpcClientMessage, JsonRpcError, Notification, NotificationSer,
-    Request, Response, ResponsePayload,
+    GenericResponse, Id, JsonRpcClientMessage, JsonRpcError, Notification, Request, Response,
+    ResponsePayload, TwoPointZero,
 };
 use std::borrow::Cow;
 use tracing::*;
@@ -94,6 +95,14 @@ impl ConnectionContext {
         method: &'a str,
         params: impl Into<Option<&'a T>>,
     ) {
+        #[derive(serde::Serialize)]
+        struct JsonRpcNotification<'a> {
+            jsonrpc: TwoPointZero,
+            method: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            params: Option<serde_json::Value>,
+        }
+
         fn serialize_notification<'a, T: serde::Serialize + 'a>(
             method: &'a str,
             params: impl Into<Option<&'a T>>,
@@ -105,7 +114,11 @@ impl ConnectionContext {
                 None
             };
 
-            let notification = Notification::new(Cow::Borrowed(method), params);
+            let notification = JsonRpcNotification {
+                jsonrpc: TwoPointZero,
+                method,
+                params,
+            };
             serde_json::to_string(&notification).map_err(|e| JsonRpcError::ser(e, Id::Null))
         }
 
@@ -325,7 +338,15 @@ mod tests {
     use serde_json::json;
 
     // Mock connection handler for testing
-    struct MockHandler;
+    struct MockHandler {
+        context: ConnectionContext,
+    }
+
+    impl MockHandler {
+        fn new(context: ConnectionContext) -> Self {
+            Self { context }
+        }
+    }
 
     #[async_trait::async_trait]
     impl JsonRpcConnectionHandler for MockHandler {
@@ -348,6 +369,36 @@ mod tests {
                     }
                     let params = expect_params::<AddParams>(&id, params)?;
                     Ok(json!(params.a + params.b))
+                }
+                "trigger_server_notification" => {
+                    // Send a notification from server to client
+                    self.context
+                        .send_notification(
+                            "server_event",
+                            &json!({"message": "Hello from server!"}),
+                        )
+                        .await;
+                    Ok(json!("notification_sent"))
+                }
+                "trigger_multiple_notifications" => {
+                    // Send multiple notifications to test ordering
+                    self.context
+                        .send_notification("server_event", &json!({"count": 1}))
+                        .await;
+                    self.context
+                        .send_notification("server_event", &json!({"count": 2}))
+                        .await;
+                    self.context
+                        .send_notification("server_event", &json!({"count": 3}))
+                        .await;
+                    Ok(json!("notifications_sent"))
+                }
+                "trigger_parameterless_notification" => {
+                    // Send a notification without any parameters
+                    self.context
+                        .send_notification::<()>("server_event", None)
+                        .await;
+                    Ok(json!("parameterless_notification_sent"))
                 }
                 "error" => Err(JsonRpcError::internal_anyhow_error(
                     id.into_owned(),
@@ -378,7 +429,13 @@ mod tests {
     // Helper function to create a server connection for testing
     fn create_test_connection() -> (JsonRpcServerConnection<MockHandler>, NotificationReceiver) {
         let (sender, receiver) = tokio::sync::mpsc::channel(100);
-        (JsonRpcServerConnection::new(MockHandler, sender), receiver)
+        let context = ConnectionContext {
+            server_notification_sender: sender.clone(),
+        };
+        (
+            JsonRpcServerConnection::new(MockHandler::new(context), sender),
+            receiver,
+        )
     }
 
     async fn assert_response(request: &str, test_name: &str) {
@@ -522,5 +579,93 @@ mod tests {
             "no_params_response",
         )
         .await;
+    }
+
+    #[tokio::test]
+    async fn test_server_notifications() {
+        let (conn, mut receiver) = create_test_connection();
+
+        // Test single notification
+        let response = conn
+            .handle_request(
+                r#"{"jsonrpc": "2.0", "method": "trigger_server_notification", "id": 1}"#
+                    .to_string(),
+            )
+            .await
+            .unwrap();
+        let notification = receiver.recv().await.expect("Should receive notification");
+
+        // Parse and normalize the notification JSON
+        let parsed: serde_json::Value = serde_json::from_str(&notification).unwrap();
+        let normalized = serde_json::to_string_pretty(&parsed).unwrap();
+        assert_contents(
+            "src/mcp/jsonrpc/testdata/single_server_notification.json",
+            &normalized,
+        );
+
+        // Parse and normalize the response JSON
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        let normalized = serde_json::to_string_pretty(&parsed).unwrap();
+        assert_contents(
+            "src/mcp/jsonrpc/testdata/single_server_notification_response.json",
+            &normalized,
+        );
+
+        // Test multiple notifications in order
+        let response = conn
+            .handle_request(
+                r#"{"jsonrpc": "2.0", "method": "trigger_multiple_notifications", "id": 2}"#
+                    .to_string(),
+            )
+            .await
+            .unwrap();
+
+        // Verify notifications are received in order
+        for i in 1..=3 {
+            let notification = receiver.recv().await.expect("Should receive notification");
+            let parsed: serde_json::Value = serde_json::from_str(&notification).unwrap();
+            let normalized = serde_json::to_string_pretty(&parsed).unwrap();
+            assert_contents(
+                &format!(
+                    "src/mcp/jsonrpc/testdata/multiple_server_notification_{}.json",
+                    i
+                ),
+                &normalized,
+            );
+        }
+
+        // Parse and normalize the response JSON
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        let normalized = serde_json::to_string_pretty(&parsed).unwrap();
+        assert_contents(
+            "src/mcp/jsonrpc/testdata/multiple_server_notifications_response.json",
+            &normalized,
+        );
+
+        // Test parameterless notification
+        let response = conn
+            .handle_request(
+                r#"{"jsonrpc": "2.0", "method": "trigger_parameterless_notification", "id": 3}"#
+                    .to_string(),
+            )
+            .await
+            .unwrap();
+        let notification = receiver.recv().await.expect("Should receive notification");
+
+        // Parse and normalize the notification JSON
+        let parsed: serde_json::Value = serde_json::from_str(&notification).unwrap();
+        let normalized = serde_json::to_string_pretty(&parsed).unwrap();
+        assert_contents(
+            "src/mcp/jsonrpc/testdata/parameterless_server_notification.json",
+            &normalized,
+        );
+
+        // Parse and normalize the response JSON
+        let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
+        let normalized = serde_json::to_string_pretty(&parsed).unwrap();
+        assert_contents(
+            "src/mcp/jsonrpc/testdata/parameterless_server_notification_response.json",
+            &normalized,
+        );
     }
 }

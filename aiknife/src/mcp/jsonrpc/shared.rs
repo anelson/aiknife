@@ -2,7 +2,10 @@ use anyhow::Result;
 use jsonrpsee_types as jsonrpc;
 
 /// Re-use some of the heavy lifting done in jsonrpsee, pretending as if these are our own types
-pub(crate) use jsonrpc::{ErrorCode, ErrorObjectOwned, Id, Request, Response, ResponsePayload, NotificationSer};
+pub(crate) use jsonrpc::{
+    ErrorCode, ErrorObjectOwned, Id, NotificationSer, Request, Response, ResponsePayload,
+    TwoPointZero,
+};
 
 /// Type that tells `serde_json` that we expect a valid JSON value, but we want to defer parsing it
 /// until later.  This is used in the JSON RPC impl code where we don't yet know what specific Rust
