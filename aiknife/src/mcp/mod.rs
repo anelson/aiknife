@@ -4,6 +4,7 @@ use tracing::*;
 
 mod jsonrpc;
 mod transport;
+mod server;
 #[allow(dead_code, irrefutable_let_patterns)]
 mod types;
 

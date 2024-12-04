@@ -2,7 +2,7 @@ use anyhow::Result;
 use jsonrpsee_types as jsonrpc;
 
 /// Re-use some of the heavy lifting done in jsonrpsee, pretending as if these are our own types
-pub(crate) use jsonrpc::{ErrorCode, ErrorObjectOwned, Id, Request, Response, ResponsePayload};
+pub(crate) use jsonrpc::{ErrorCode, ErrorObjectOwned, Id, Request, Response, ResponsePayload, NotificationSer};
 
 /// Type that tells `serde_json` that we expect a valid JSON value, but we want to defer parsing it
 /// until later.  This is used in the JSON RPC impl code where we don't yet know what specific Rust
@@ -20,7 +20,7 @@ pub(crate) type GenericParams<'a> = &'a serde_json::value::RawValue;
 /// reference to the slice of the input string containing that JSON.  This lets us use a generic
 /// type here without incurring the cost of parsing JSON to `serde_json::Value` and then
 /// re-processing that again into some expected type.
-pub(crate) type Notification<'a> = jsonrpc::Notification<'a, Option<GenericParams<'a>>>;
+pub(crate) type Notification<'a, T = Option<GenericParams<'a>>> = jsonrpc::Notification<'a, T>;
 
 /// The response type that has a generic JSON payload.  The actual type of the payload is
 /// method-specific and is not known at the level of the JSON-RPC impl

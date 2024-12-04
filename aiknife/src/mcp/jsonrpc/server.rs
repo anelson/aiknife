@@ -1,16 +1,32 @@
 //! JSON RPC implementation that's specific to JSON RPC servers
 use super::{
-    GenericResponse, Id, JsonRpcClientMessage, JsonRpcError, Notification, Request, Response,
-    ResponsePayload,
+    GenericResponse, Id, JsonRpcClientMessage, JsonRpcError, Notification, NotificationSer,
+    Request, Response, ResponsePayload,
 };
 use std::borrow::Cow;
 use tracing::*;
+
+type NotificationSender = tokio::sync::mpsc::Sender<String>;
+
+/// Channel receiver for notifications sent asynchronously from the server, to the client, but not
+/// in response to a specific client request.
+pub(crate) type NotificationReceiver = tokio::sync::mpsc::Receiver<String>;
 
 /// A JSON-RPC service that can handle incoming connections and requests, with as little coupling
 /// to the underlying transport as possible.
 #[async_trait::async_trait]
 pub(crate) trait JsonRpcService: Sync + Send + 'static {
     type ConnectionHandler: JsonRpcConnectionHandler;
+
+    /// The maximum number of pending notifications that can be buffered for a single connection.
+    ///
+    /// This translates into the bound for the channel that is used to send notifications back to
+    /// the client.
+    ///
+    /// Most implementations should not need to modify this.
+    fn max_pending_notifications(&self) -> usize {
+        100
+    }
 
     /// Handle a new connection to the server by creating and returning a connection handler.
     ///
@@ -61,7 +77,54 @@ pub(crate) trait JsonRpcConnectionHandler: Send + Sync + 'static {
 ///
 /// TODO: fill this out.
 #[derive(Clone, Debug)]
-pub(crate) struct ConnectionContext;
+pub(crate) struct ConnectionContext {
+    server_notification_sender: NotificationSender,
+}
+
+impl ConnectionContext {
+    /// Send a notification from the server back to the client.
+    ///
+    /// Because notifications are one-way, this method is infallible.  There are some ways that the
+    /// notification can fail to send, the most likely of which is that the client has
+    /// disconnected, or will disconnect shortly after the notification is written into its buffer.
+    ///
+    /// Errors that are encountered are logged, but not passed back to the caller
+    pub(crate) async fn send_notification<'a, T: serde::Serialize + 'a>(
+        &self,
+        method: &'a str,
+        params: impl Into<Option<&'a T>>,
+    ) {
+        fn serialize_notification<'a, T: serde::Serialize + 'a>(
+            method: &'a str,
+            params: impl Into<Option<&'a T>>,
+        ) -> Result<String, JsonRpcError> {
+            let params = params.into();
+            let params = if let Some(params) = params {
+                Some(serde_json::to_value(params).map_err(|e| JsonRpcError::ser(e, Id::Null))?)
+            } else {
+                None
+            };
+
+            let notification = Notification::new(Cow::Borrowed(method), params);
+            serde_json::to_string(&notification).map_err(|e| JsonRpcError::ser(e, Id::Null))
+        }
+
+        match serialize_notification(method, params) {
+            Ok(notification) => {
+                if (self.server_notification_sender.send(notification).await).is_err() {
+                    error!(
+                        method,
+                        params = std::any::type_name::<T>(),
+                        "Notification not sent; receiver no longer listening"
+                    );
+                }
+            }
+            Err(e) => {
+                error!(error = ?e, method, params = std::any::type_name::<T>(), "Error serializing notification");
+            }
+        }
+    }
+}
 
 /// JSON RPC server which implements the JSON RPC-specific plumbing, then invokes some
 /// [`JsonRpcService`] trait impl to do the actual logic.
@@ -77,30 +140,58 @@ where
         Self { service }
     }
 
+    /// Start a new connection handler for what is presumed to be a new connection, however the
+    /// transport defines that concept
+    ///
+    /// Returns a tuple:
+    ///
+    /// - an instance of [`JsonRpcServerConnection`] that can be used to handle requests received
+    ///   from the client on this connection.
+    /// - an instance of [`NotifactionReceiver`] that can be used to receive notifications from the
+    ///   server that is handling this connection.  Notifications can be created at any time and
+    ///   are not necessarily in response to a specific client request, so the transport needs some
+    ///   mechanism to receive them from this receiver and forward them to the client.
+    ///
+    ///   The transport-specific host of this server should launch an async task that continuously
+    ///   polls this receiver and forwards the notifications to the corresponding client, for the
+    ///   duration of the connection.
     #[instrument(skip(self))]
     pub(crate) async fn handle_connection(
         &self,
-        context: ConnectionContext,
-    ) -> Result<JsonRpcServerConnection<S::ConnectionHandler>, JsonRpcError> {
+    ) -> Result<
+        (
+            JsonRpcServerConnection<S::ConnectionHandler>,
+            NotificationReceiver,
+        ),
+        JsonRpcError,
+    > {
+        let (sender, receiver) =
+            tokio::sync::mpsc::channel(self.service.max_pending_notifications());
+        let context = ConnectionContext {
+            server_notification_sender: sender.clone(),
+        };
         let handler = self.service.handle_connection(context).await?;
 
-        Ok(JsonRpcServerConnection { handler })
+        Ok((JsonRpcServerConnection::new(handler, sender), receiver))
     }
 }
 
 /// A JSON-RPC connection that is specific to JSON-RPC servers.
 pub(crate) struct JsonRpcServerConnection<H> {
     handler: H,
+    server_notification_sender: NotificationSender,
 }
 
 impl<H> JsonRpcServerConnection<H>
 where
     H: JsonRpcConnectionHandler,
 {
-    pub(crate) fn new(handler: H) -> Self {
-        Self { handler }
+    fn new(handler: H, server_notification_sender: NotificationSender) -> Self {
+        Self {
+            handler,
+            server_notification_sender,
+        }
     }
-
     /// Handle a JSON RPC request represented as a JSON string.
     ///
     /// Both success and error responses are also objects serialized to JSON
@@ -113,7 +204,8 @@ where
             })
     }
 
-    /// Internal request handler that returns the Rust response and error types
+    /// Internal request handler that returns the Rust response and error types, which makes the
+    /// code more ergonomic.  Serializing success and failure is handled separately by the caller
     async fn handle_request_internal(
         &self,
         request: String,
@@ -284,12 +376,13 @@ mod tests {
     }
 
     // Helper function to create a server connection for testing
-    fn create_test_connection() -> JsonRpcServerConnection<MockHandler> {
-        JsonRpcServerConnection::new(MockHandler)
+    fn create_test_connection() -> (JsonRpcServerConnection<MockHandler>, NotificationReceiver) {
+        let (sender, receiver) = tokio::sync::mpsc::channel(100);
+        (JsonRpcServerConnection::new(MockHandler, sender), receiver)
     }
 
     async fn assert_response(request: &str, test_name: &str) {
-        let conn = create_test_connection();
+        let (conn, _receiver) = create_test_connection();
         let response = match conn.handle_request(request.to_string()).await {
             Ok(response) => response,
             Err(err) => err,
