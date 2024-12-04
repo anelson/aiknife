@@ -1,41 +1,57 @@
 use anyhow::Result;
-use jsonrpsee::types as jsonrpc;
-use std::borrow::Cow;
-use tracing::*;
+use jsonrpsee_types as jsonrpc;
 
-/// Possible kinds of request from JSON-RPC clients
+/// Re-use some of the heavy lifting done in jsonrpsee, pretending as if these are our own types
+pub(crate) use jsonrpc::{ErrorCode, ErrorObjectOwned, Id, Request, Response, ResponsePayload};
+
+/// Type that tells `serde_json` that we expect a valid JSON value, but we want to defer parsing it
+/// until later.  This is used in the JSON RPC impl code where we don't yet know what specific Rust
+/// type a method or notification takes and don't want to descent into type parameter hell.
+///
+/// `serde_json::value::RawValue` is a special case type with specific optimizations in `serde_json`
+pub(crate) type GenericParams<'a> = &'a serde_json::value::RawValue;
+
+/// Convenient type alias for notifications with generic raw JSON payloads.
+///
+/// The jsonrpsee `Request` type explicitly holds only a raw JSON payload, for some reason the
+/// Notification type doesn't.  That is what we need here
+///
+/// `serde_json::value::RawValue` is a special case type that contains valid JSON but is just a
+/// reference to the slice of the input string containing that JSON.  This lets us use a generic
+/// type here without incurring the cost of parsing JSON to `serde_json::Value` and then
+/// re-processing that again into some expected type.
+pub(crate) type Notification<'a> = jsonrpc::Notification<'a, Option<GenericParams<'a>>>;
+
+/// The response type that has a generic JSON payload.  The actual type of the payload is
+/// method-specific and is not known at the level of the JSON-RPC impl
+pub(crate) type GenericResponse = Response<'static, serde_json::Value>;
+
+/// Possible kinds of messages sent to servers from JSON-RPC clients
 #[derive(Debug)]
-pub(crate) enum JsonRpcRequest<'a> {
+pub(crate) enum JsonRpcClientMessage<'a> {
     /// A regular method invocation
     Request(jsonrpc::Request<'a>),
 
     /// A notification, which is fire-and-forget and does not elicit a response
-    ///
-    /// NOTE: this weird ugly `Option<..>` crap is copied from `server.js` in the jsonrpsee-server
-    /// code.  It allows to defer the parsing of the payload until later when we can determine what
-    /// the expected input is.
-    Notification(jsonrpc::Notification<'a, Option<&'a serde_json::value::RawValue>>),
+    Notification(Notification<'a>),
 
     /// An invalid request, which is a JSON-RPC error, but still has an ID field so that when we
     /// report the error we can include the ID of the request that caused it.
     InvalidRequest(jsonrpc::InvalidRequest<'a>),
 }
 
-impl<'a> JsonRpcRequest<'a> {
+impl<'a> JsonRpcClientMessage<'a> {
     pub(crate) fn from_str(request: &'a str) -> Result<Self, JsonRpcError> {
         // Inspired by the `handle_rpc_call` function in jsonrpsee-server in `src/server.rs`
 
         // In short: try to parse as jsonrpc::Request, if not then as Notification, and if not as
         // InvalidRequest
         if let Ok(request) = serde_json::from_str::<jsonrpc::Request>(request) {
-            Ok(JsonRpcRequest::Request(request))
-        } else if let Ok(notification) = serde_json::from_str::<
-            jsonrpc::Notification<'a, Option<&'a serde_json::value::RawValue>>,
-        >(request)
-        {
-            Ok(JsonRpcRequest::Notification(notification))
+            Ok(JsonRpcClientMessage::Request(request))
+        } else if let Ok(notification) = serde_json::from_str::<Notification>(request) {
+            Ok(JsonRpcClientMessage::Notification(notification))
         } else {
-            Ok(JsonRpcRequest::InvalidRequest(
+            Ok(JsonRpcClientMessage::InvalidRequest(
                 serde_json::from_str::<jsonrpc::InvalidRequest>(request)
                     .map_err(|e| JsonRpcError::deser(e, None))?,
             ))
@@ -130,8 +146,12 @@ impl JsonRpcError {
     }
 }
 
-impl Into<jsonrpc::Response<'static, serde_json::Value>> for JsonRpcError {
-    fn into(self) -> jsonrpc::Response<'static, serde_json::Value> {
+/// Implement the conversion from `JsonRpcError` to a JSON-RPC response.
+///
+/// This is a convenience method to allow `JsonRpcError` to be used directly as a response
+/// elsewhere in the implementation.
+impl Into<GenericResponse> for JsonRpcError {
+    fn into(self) -> GenericResponse {
         jsonrpc::Response::new(
             jsonrpc::ResponsePayload::error(jsonrpc::ErrorObjectOwned::owned::<Vec<String>>(
                 self.code.code(),
@@ -150,7 +170,7 @@ mod tests {
     #[test]
     fn parse_json_rpc_notification() {
         let request = r#"    { "jsonrpc": "2.0", "method": "notifications/initialized" }"#;
-        let request: JsonRpcRequest = JsonRpcRequest::from_str(request).unwrap();
-        assert!(matches!(request, JsonRpcRequest::Notification(_)));
+        let request: JsonRpcClientMessage = JsonRpcClientMessage::from_str(request).unwrap();
+        assert!(matches!(request, JsonRpcClientMessage::Notification(_)));
     }
 }

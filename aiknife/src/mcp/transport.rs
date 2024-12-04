@@ -1,5 +1,5 @@
+use super::jsonrpc;
 use anyhow::Result;
-use jsonrpsee::types::Response;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 /// Trait representing a transport over which MCP requests and responses can be sent
@@ -10,10 +10,7 @@ pub trait McpTransport: Send {
     async fn read_request(&mut self) -> Result<Option<String>>;
 
     /// Write a response to the transport
-    async fn write_response(
-        &mut self,
-        response: Response<'static, serde_json::Value>,
-    ) -> Result<()> {
+    async fn write_response(&mut self, response: jsonrpc::GenericResponse) -> Result<()> {
         self.write_response_string(&serde_json::to_string(&response)?)
             .await
     }

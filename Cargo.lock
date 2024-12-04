@@ -90,7 +90,7 @@ dependencies = [
  "either",
  "futures",
  "itertools 0.13.0",
- "jsonrpsee",
+ "jsonrpsee-types",
  "reqwest 0.11.27",
  "serde",
  "serde_json",
@@ -2618,36 +2618,6 @@ checksum = "5dea2b27dd239b2556ed7a25ba842fe47fd602e7fc7433c2a8d6106d4d9edd70"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "jsonrpsee"
-version = "0.24.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5c71d8c1a731cc4227c2f698d377e7848ca12c8a48866fc5e6951c43a4db843"
-dependencies = [
- "jsonrpsee-core",
- "jsonrpsee-types",
-]
-
-[[package]]
-name = "jsonrpsee-core"
-version = "0.24.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2882f6f8acb9fdaec7cefc4fd607119a9bd709831df7d7672a1d3b644628280"
-dependencies = [
- "async-trait",
- "futures-util",
- "http 1.1.0",
- "jsonrpsee-types",
- "parking_lot",
- "rand 0.8.5",
- "rustc-hash 2.0.0",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
 ]
 
 [[package]]

@@ -1,16 +1,13 @@
 use anyhow::Result;
-use jsonrpsee::types as jsonrpc;
 use std::borrow::Cow;
 use tracing::*;
 
-mod client;
-mod server;
-mod shared;
+mod jsonrpc;
 mod transport;
 #[allow(dead_code, irrefutable_let_patterns)]
 mod types;
 
-use shared::{JsonRpcError, JsonRpcRequest};
+use jsonrpc::{JsonRpcClientMessage, JsonRpcError};
 pub use transport::{McpTransport, StdioTransport, StreamTransport, UnixSocketTransport};
 
 /// Run the server for MCP using stdin/stdout
@@ -25,7 +22,7 @@ pub async fn serve(mut transport: Box<dyn McpTransport>) -> Result<()> {
                 }
             }
             Err(e) => {
-                let response: jsonrpc::Response<serde_json::Value> = e.into();
+                let response: jsonrpc::GenericResponse = e.into();
                 transport.write_response(response).await?;
             }
         }
@@ -44,8 +41,8 @@ async fn process_request(request: String) -> Result<Option<String>, JsonRpcError
     // if so, in the `jsonrpsee-server` code, `src/server.rs`, see the function `handle_rpc_call`
 
     // Try to parse this as a request, if that fails try to treat it as a notification
-    match JsonRpcRequest::from_str(&request)? {
-        JsonRpcRequest::Request(request) => {
+    match JsonRpcClientMessage::from_str(&request)? {
+        JsonRpcClientMessage::Request(request) => {
             let id = request.id.clone().into_owned();
             // Handle the request
             let response = handle_request(request).await?;
@@ -59,12 +56,12 @@ async fn process_request(request: String) -> Result<Option<String>, JsonRpcError
                 serde_json::to_string(&response).map_err(|e| JsonRpcError::ser(e, id))?;
             Ok(Some(response))
         }
-        JsonRpcRequest::Notification(_notification) => {
+        JsonRpcClientMessage::Notification(_notification) => {
             // Notifications don't get responses
             error!("TODO: implement notifications!");
             Ok(None)
         }
-        JsonRpcRequest::InvalidRequest(invalid) => {
+        JsonRpcClientMessage::InvalidRequest(invalid) => {
             // This request is mal-formed but at least is has an ID so we can reference that ID
             // in the resulting error
             let id = invalid.id.into_owned();
