@@ -2,7 +2,6 @@ use std::borrow::Cow;
 
 use anyhow::Result;
 use jsonrpsee::types::{ErrorCode, ErrorObjectOwned, Id, Request, Response, ResponsePayload};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tracing::*;
 
 mod transport;
@@ -294,8 +293,6 @@ fn make_error_response(error: anyhow::Error) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::NamedTempFile;
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
 
     #[test]
     fn parse_json_rpc_notification() {

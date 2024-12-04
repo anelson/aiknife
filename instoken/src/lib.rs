@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-use std::fmt::Debug;
 use std::sync::Arc;
 
 mod bpe;
@@ -178,7 +176,6 @@ impl Encoding {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn it_works() {}

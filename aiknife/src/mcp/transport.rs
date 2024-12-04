@@ -1,8 +1,6 @@
 use anyhow::Result;
-use jsonrpsee::types::{ErrorCode, ErrorObjectOwned, Id, Request, Response, ResponsePayload};
-use serde_json::json;
+use jsonrpsee::types::Response;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
-use tracing::*;
 
 /// Trait representing a transport over which MCP requests and responses can be sent
 #[async_trait::async_trait]
@@ -133,7 +131,7 @@ impl McpTransport for UnixSocketTransport {
 mod tests {
     use super::*;
     use tempfile::NamedTempFile;
-    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter};
+    use tokio::io::{BufReader, BufWriter};
 
     #[tokio::test]
     async fn test_stream_transport() -> Result<()> {

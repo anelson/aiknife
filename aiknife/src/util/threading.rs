@@ -963,7 +963,7 @@ mod test {
                 Ok(())
             });
 
-        let mut combined = CombinedOutputReceiver::join(running_receiver, thread_worker_handle);
+        let combined = CombinedOutputReceiver::join(running_receiver, thread_worker_handle);
 
         // Test iterator implementation
         let results: Vec<_> = combined.collect();

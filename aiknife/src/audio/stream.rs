@@ -5,8 +5,7 @@
 use crate::util::threading;
 use anyhow::Result;
 use std::fmt::Debug;
-use std::num::{NonZeroU32, NonZeroUsize};
-use std::path::PathBuf;
+use std::num::NonZeroU32;
 use std::time::Duration;
 
 /// A guard object that must be kept alive for the duration of the stream.

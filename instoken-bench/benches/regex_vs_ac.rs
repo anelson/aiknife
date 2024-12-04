@@ -5,7 +5,7 @@
 //! This benchmark compares the cost of searching some large text for a set of special tokens with
 //! both impls.
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 
 #[inline]
 fn fibonacci(n: u64) -> u64 {

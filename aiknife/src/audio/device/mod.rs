@@ -12,7 +12,6 @@ mod system;
 
 use super::stream::{AudioInputStream, AudioStreamGuard};
 use anyhow::Result;
-use std::sync::Arc;
 
 pub use system::list_device_names;
 

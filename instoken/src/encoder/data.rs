@@ -10,7 +10,7 @@
 use crate::EncodingType;
 use base64::{engine::general_purpose, Engine as _};
 use rust_embed::RustEmbed;
-use std::io::{BufRead, BufReader};
+use std::io::BufRead;
 
 #[derive(RustEmbed)]
 #[folder = "tokens/cl100k_base"]
