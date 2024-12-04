@@ -26,7 +26,6 @@
 
 use anyhow::Result;
 use crossbeam::channel::{bounded, Receiver, Sender};
-use std::panic::AssertUnwindSafe;
 use std::thread;
 use tracing::*;
 
@@ -642,6 +641,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::panic::AssertUnwindSafe;
     use std::time::Duration;
 
     /// A simple test worker that counts up to a number
