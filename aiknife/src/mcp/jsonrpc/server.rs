@@ -1,9 +1,5 @@
 //! JSON RPC implementation that's specific to JSON RPC servers
 use super::shared as jsonrpc;
-use super::{
-    GenericResponse, Id, JsonRpcClientMessage, JsonRpcError, Notification, Request, Response,
-    ResponsePayload, TwoPointZero,
-};
 use std::borrow::Cow;
 use tracing::*;
 
@@ -38,7 +34,7 @@ pub(crate) trait JsonRpcService: Sync + Send + 'static {
     async fn handle_connection(
         &self,
         context: ConnectionContext,
-    ) -> Result<Self::ConnectionHandler, JsonRpcError>;
+    ) -> Result<Self::ConnectionHandler, jsonrpc::JsonRpcError>;
 }
 
 /// The handler for a single JSON-RPC connection.
@@ -51,10 +47,10 @@ pub(crate) trait JsonRpcConnectionHandler: Send + Sync + 'static {
     /// Handle a JSON-RPC method invoation
     async fn handle_method<'a>(
         &self,
-        id: Id<'a>,
+        id: jsonrpc::Id<'a>,
         method: Cow<'a, str>,
         params: Option<&'a serde_json::value::RawValue>,
-    ) -> Result<serde_json::Value, JsonRpcError>;
+    ) -> Result<serde_json::Value, jsonrpc::JsonRpcError>;
 
     /// Handle a JSON-RPC notification (which is like a method invocation, but no response is
     /// expected).
@@ -66,9 +62,11 @@ pub(crate) trait JsonRpcConnectionHandler: Send + Sync + 'static {
         &self,
         method: Cow<'a, str>,
         params: Option<&'a serde_json::value::RawValue>,
-    ) -> Result<(), JsonRpcError> {
+    ) -> Result<(), jsonrpc::JsonRpcError> {
         // By default, just implement this as a method invocation that ignores the response
-        let _ = self.handle_method(Id::Null, method, params).await?;
+        let _ = self
+            .handle_method(jsonrpc::Id::Null, method, params)
+            .await?;
 
         Ok(())
     }
@@ -97,7 +95,7 @@ impl ConnectionContext {
     ) {
         #[derive(serde::Serialize)]
         struct JsonRpcNotification<'a> {
-            jsonrpc: TwoPointZero,
+            jsonrpc: jsonrpc::TwoPointZero,
             method: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
             params: Option<serde_json::Value>,
@@ -106,20 +104,24 @@ impl ConnectionContext {
         fn serialize_notification<'a, T: serde::Serialize + 'a>(
             method: &'a str,
             params: impl Into<Option<&'a T>>,
-        ) -> Result<String, JsonRpcError> {
+        ) -> Result<String, jsonrpc::JsonRpcError> {
             let params = params.into();
             let params = if let Some(params) = params {
-                Some(serde_json::to_value(params).map_err(|e| JsonRpcError::ser(e, Id::Null))?)
+                Some(
+                    serde_json::to_value(params)
+                        .map_err(|e| jsonrpc::JsonRpcError::ser(e, jsonrpc::Id::Null))?,
+                )
             } else {
                 None
             };
 
             let notification = JsonRpcNotification {
-                jsonrpc: TwoPointZero,
+                jsonrpc: jsonrpc::TwoPointZero,
                 method,
                 params,
             };
-            serde_json::to_string(&notification).map_err(|e| JsonRpcError::ser(e, Id::Null))
+            serde_json::to_string(&notification)
+                .map_err(|e| jsonrpc::JsonRpcError::ser(e, jsonrpc::Id::Null))
         }
 
         match serialize_notification(method, params) {
@@ -176,7 +178,7 @@ where
             JsonRpcServerConnection<S::ConnectionHandler>,
             NotificationReceiver,
         ),
-        JsonRpcError,
+        jsonrpc::JsonRpcError,
     > {
         let (sender, receiver) =
             tokio::sync::mpsc::channel(self.service.max_pending_notifications());
@@ -222,19 +224,20 @@ where
     async fn handle_request_internal(
         &self,
         request: String,
-    ) -> Result<Option<GenericResponse>, JsonRpcError> {
-        match JsonRpcClientMessage::from_str(&request)? {
-            JsonRpcClientMessage::Request(request) => {
+    ) -> Result<Option<jsonrpc::GenericResponse>, jsonrpc::JsonRpcError> {
+        match jsonrpc::JsonRpcClientMessage::from_str(&request)? {
+            jsonrpc::JsonRpcClientMessage::Request(request) => {
                 let id = request.id.clone().into_owned();
                 // Handle the request
                 let response = self.handle_method(request).await?;
 
                 // Wrap it in the standard JSON-RPC response
-                let response = Response::new(ResponsePayload::success(response), id.clone());
+                let response =
+                    jsonrpc::Response::new(jsonrpc::ResponsePayload::success(response), id.clone());
 
                 Ok(Some(response))
             }
-            JsonRpcClientMessage::Notification(notification) => {
+            jsonrpc::JsonRpcClientMessage::Notification(notification) => {
                 // Notifications don't get responses.  however the notification handler is
                 // fallible, if it fails we want to log that fact.
                 let method = notification.method.clone().into_owned();
@@ -244,11 +247,11 @@ where
                 }
                 Ok(None)
             }
-            JsonRpcClientMessage::InvalidRequest(invalid) => {
+            jsonrpc::JsonRpcClientMessage::InvalidRequest(invalid) => {
                 // This request is mal-formed but at least is has an ID so we can reference that ID
                 // in the resulting error
                 let id = invalid.id.into_owned();
-                let response = JsonRpcError::invalid_request(id.clone());
+                let response = jsonrpc::JsonRpcError::invalid_request(id.clone());
                 Err(response)
             }
         }
@@ -257,14 +260,14 @@ where
     #[instrument(skip_all, fields(method = %request.method, id = %request.id))]
     async fn handle_method<'a>(
         &self,
-        request: Request<'a>,
-    ) -> Result<serde_json::Value, JsonRpcError> {
-        let Request {
+        request: jsonrpc::Request<'a>,
+    ) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
+        let jsonrpc::Request {
             id, method, params, ..
         } = request;
 
-        // It's not clear why jsonrpsee `Request` structs use `Option<Cow<RawValue>>` while the
-        // Notification uses `Option<&RawValue>`.  For consistency, both the method and
+        // It's not clear why jsonrpsee `jsonrpc::Request` structs use `Option<Cow<RawValue>>` while the
+        // jsonrpc::Notification uses `Option<&RawValue>`.  For consistency, both the method and
         // notification handlers just take `Option<&RawValue>`, so jump through some hoops to hide
         // the Cow here.
         let params_ref = params.as_ref().map(|cow| cow.as_ref());
@@ -284,8 +287,11 @@ where
     /// log errors handling notifications.  No error will be returned to the client because
     /// according to the JSON RPC spec servers MUST NOT return any response to notifications
     #[instrument(skip_all, fields(method = %request.method))]
-    async fn handle_notification<'a>(&self, request: Notification<'a>) -> Result<(), JsonRpcError> {
-        let Notification { method, params, .. } = request;
+    async fn handle_notification<'a>(
+        &self,
+        request: jsonrpc::Notification<'a>,
+    ) -> Result<(), jsonrpc::JsonRpcError> {
+        let jsonrpc::Notification { method, params, .. } = request;
         if let Err(e) = self.handler.handle_notification(method, params).await {
             error!(error = ?e, "Error handling notification");
         }
@@ -293,8 +299,8 @@ where
         Ok(())
     }
 
-    fn json_rpc_error_to_string(error: JsonRpcError) -> String {
-        let response: GenericResponse = error.into();
+    fn json_rpc_error_to_string(error: jsonrpc::JsonRpcError) -> String {
+        let response: jsonrpc::GenericResponse = error.into();
 
         serde_json::to_string(&response)
             .unwrap_or_else(|e| format!("{{\"error\":\"JSON serialization error while attempting to report an error: {}\"}}", e.to_string()))
@@ -303,10 +309,11 @@ where
 
 /// Helper for RPC server impls to concisely serialize their method responses to JSON
 pub(crate) fn json_response<T: serde::Serialize>(
-    id: &Id,
+    id: &jsonrpc::Id,
     response: &T,
-) -> Result<serde_json::Value, JsonRpcError> {
-    serde_json::to_value(response).map_err(|e| JsonRpcError::ser(e, id.clone().into_owned()))
+) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
+    serde_json::to_value(response)
+        .map_err(|e| jsonrpc::JsonRpcError::ser(e, id.clone().into_owned()))
 }
 
 /// Helper for RPC server impls to deserialize their expected parameters struct from the JSON
@@ -318,16 +325,16 @@ pub(crate) fn json_response<T: serde::Serialize>(
 /// missing, this will report an error.  If your request doesn't expect params, then do not call
 /// this method.
 pub(crate) fn expect_params<P: serde::de::DeserializeOwned>(
-    id: &Id,
+    id: &jsonrpc::Id,
     params: Option<&serde_json::value::RawValue>,
-) -> Result<P, JsonRpcError> {
+) -> Result<P, jsonrpc::JsonRpcError> {
     let params = params.ok_or_else(|| {
         error!("Expected params in request, but none were provided");
-        JsonRpcError::invalid_params(id.clone().into_owned())
+        jsonrpc::JsonRpcError::invalid_params(id.clone().into_owned())
     })?;
     serde_json::from_str(params.get()).map_err(|e| {
         error!(error = %e, params = params.get(), "Error deserializing params");
-        JsonRpcError::invalid_params(id.clone().into_owned())
+        jsonrpc::JsonRpcError::invalid_params(id.clone().into_owned())
     })
 }
 
@@ -352,10 +359,10 @@ mod tests {
     impl JsonRpcConnectionHandler for MockHandler {
         async fn handle_method<'a>(
             &self,
-            id: Id<'a>,
+            id: jsonrpc::Id<'a>,
             method: Cow<'a, str>,
             params: Option<&'a serde_json::value::RawValue>,
-        ) -> Result<serde_json::Value, JsonRpcError> {
+        ) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
             match method.as_ref() {
                 "echo" => {
                     let params = expect_params::<serde_json::Value>(&id, params)?;
@@ -400,11 +407,11 @@ mod tests {
                         .await;
                     Ok(json!("parameterless_notification_sent"))
                 }
-                "error" => Err(JsonRpcError::internal_anyhow_error(
+                "error" => Err(jsonrpc::JsonRpcError::internal_anyhow_error(
                     id.into_owned(),
                     anyhow::anyhow!("Test error!"),
                 )),
-                unknown => Err(JsonRpcError::method_not_found(
+                unknown => Err(jsonrpc::JsonRpcError::method_not_found(
                     unknown.to_string(),
                     id.into_owned(),
                 )),
@@ -415,12 +422,12 @@ mod tests {
             &self,
             method: Cow<'a, str>,
             _params: Option<&'a serde_json::value::RawValue>,
-        ) -> Result<(), JsonRpcError> {
+        ) -> Result<(), jsonrpc::JsonRpcError> {
             match method.as_ref() {
                 "notify" => Ok(()),
-                unknown => Err(JsonRpcError::method_not_found(
+                unknown => Err(jsonrpc::JsonRpcError::method_not_found(
                     unknown.to_string(),
-                    Id::Null,
+                    jsonrpc::Id::Null,
                 )),
             }
         }
