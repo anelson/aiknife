@@ -1,7 +1,6 @@
-use std::borrow::Cow;
-
 use anyhow::Result;
-use jsonrpsee::types::{ErrorCode, ErrorObjectOwned, Id, Request, Response, ResponsePayload};
+use jsonrpsee::types as jsonrpc;
+use std::borrow::Cow;
 use tracing::*;
 
 mod transport;
@@ -22,7 +21,7 @@ pub async fn serve(mut transport: Box<dyn McpTransport>) -> Result<()> {
                 }
             }
             Err(e) => {
-                let response: Response<serde_json::Value> = e.into();
+                let response: jsonrpc::Response<serde_json::Value> = e.into();
                 transport.write_response(response).await?;
             }
         }
@@ -35,36 +34,36 @@ pub async fn serve(mut transport: Box<dyn McpTransport>) -> Result<()> {
 #[derive(Debug)]
 enum JsonRpcRequest<'a> {
     /// A regular method invocation
-    Request(Request<'a>),
+    Request(jsonrpc::Request<'a>),
 
     /// A notification, which is fire-and-forget and does not elicit a response
     ///
     /// NOTE: this weird ugly `Option<..>` crap is copied from `server.js` in the jsonrpsee-server
     /// code.  It allows to defer the parsing of the payload until later when we can determine what
     /// the expected input is.
-    Notification(jsonrpsee::types::Notification<'a, Option<&'a serde_json::value::RawValue>>),
+    Notification(jsonrpc::Notification<'a, Option<&'a serde_json::value::RawValue>>),
 
     /// An invalid request, which is a JSON-RPC error, but still has an ID field so that when we
     /// report the error we can include the ID of the request that caused it.
-    InvalidRequest(jsonrpsee::types::InvalidRequest<'a>),
+    InvalidRequest(jsonrpc::InvalidRequest<'a>),
 }
 
 impl<'a> JsonRpcRequest<'a> {
     fn from_str(request: &'a str) -> Result<Self, JsonRpcError> {
         // Inspired by the `handle_rpc_call` function in jsonrpsee-server in `src/server.rs`
 
-        // In short: try to parse as Request, if not then as Notification, and if not as
+        // In short: try to parse as jsonrpc::Request, if not then as Notification, and if not as
         // InvalidRequest
-        if let Ok(request) = serde_json::from_str::<Request>(request) {
+        if let Ok(request) = serde_json::from_str::<jsonrpc::Request>(request) {
             Ok(JsonRpcRequest::Request(request))
         } else if let Ok(notification) = serde_json::from_str::<
-            jsonrpsee::types::Notification<'a, Option<&'a serde_json::value::RawValue>>,
+            jsonrpc::Notification<'a, Option<&'a serde_json::value::RawValue>>,
         >(request)
         {
             Ok(JsonRpcRequest::Notification(notification))
         } else {
             Ok(JsonRpcRequest::InvalidRequest(
-                serde_json::from_str::<jsonrpsee::types::InvalidRequest>(request)
+                serde_json::from_str::<jsonrpc::InvalidRequest>(request)
                     .map_err(|e| JsonRpcError::deser(e, None))?,
             ))
         }
@@ -79,17 +78,17 @@ impl<'a> JsonRpcRequest<'a> {
 /// Uses the error codes defined in the JSON-RPC spec.
 #[derive(Debug)]
 struct JsonRpcError {
-    code: ErrorCode,
+    code: jsonrpc::ErrorCode,
     message: String,
-    id: Option<Id<'static>>,
+    id: Option<jsonrpc::Id<'static>>,
     data: Option<Vec<String>>,
 }
 
 impl JsonRpcError {
     fn new(
-        code: ErrorCode,
+        code: jsonrpc::ErrorCode,
         message: impl Into<String>,
-        id: impl Into<Option<Id<'static>>>,
+        id: impl Into<Option<jsonrpc::Id<'static>>>,
         data: impl Into<Option<Vec<String>>>,
     ) -> Self {
         Self {
@@ -102,9 +101,9 @@ impl JsonRpcError {
 
     /// Make a new JSON RPC error, capturing the source error chain in the `data` field
     fn from_error(
-        code: ErrorCode,
+        code: jsonrpc::ErrorCode,
         error: impl std::error::Error,
-        id: impl Into<Option<Id<'static>>>,
+        id: impl Into<Option<jsonrpc::Id<'static>>>,
     ) -> Self {
         let message = error.to_string();
         let mut inner = error.source();
@@ -118,52 +117,52 @@ impl JsonRpcError {
     }
 
     /// Error deserializing some JSON.
-    fn deser(error: serde_json::Error, id: impl Into<Option<Id<'static>>>) -> Self {
-        Self::from_error(ErrorCode::ParseError, error, id)
+    fn deser(error: serde_json::Error, id: impl Into<Option<jsonrpc::Id<'static>>>) -> Self {
+        Self::from_error(jsonrpc::ErrorCode::ParseError, error, id)
     }
 
     /// Error serializing some JSON.  Less likely but still possible.
-    fn ser(error: serde_json::Error, id: Id<'static>) -> Self {
-        Self::from_error(ErrorCode::ParseError, error, id)
+    fn ser(error: serde_json::Error, id: jsonrpc::Id<'static>) -> Self {
+        Self::from_error(jsonrpc::ErrorCode::ParseError, error, id)
     }
 
-    fn method_not_found(method: String, id: Id<'static>) -> Self {
+    fn method_not_found(method: String, id: jsonrpc::Id<'static>) -> Self {
         Self::new(
-            ErrorCode::MethodNotFound,
+            jsonrpc::ErrorCode::MethodNotFound,
             format!("Method not found: {}", method),
             id,
             None,
         )
     }
 
-    fn invalid_params(id: Id<'static>) -> Self {
+    fn invalid_params(id: jsonrpc::Id<'static>) -> Self {
         Self::new(
-            ErrorCode::InvalidParams,
-            ErrorCode::InvalidParams.message(),
+            jsonrpc::ErrorCode::InvalidParams,
+            jsonrpc::ErrorCode::InvalidParams.message(),
             id,
             None,
         )
     }
 
-    fn invalid_request(id: Id<'static>) -> Self {
+    fn invalid_request(id: jsonrpc::Id<'static>) -> Self {
         Self::new(
-            ErrorCode::InvalidRequest,
-            ErrorCode::InvalidRequest.message(),
+            jsonrpc::ErrorCode::InvalidRequest,
+            jsonrpc::ErrorCode::InvalidRequest.message(),
             id,
             None,
         )
     }
 }
 
-impl Into<Response<'static, serde_json::Value>> for JsonRpcError {
-    fn into(self) -> Response<'static, serde_json::Value> {
-        Response::new(
-            ResponsePayload::error(ErrorObjectOwned::owned::<Vec<String>>(
+impl Into<jsonrpc::Response<'static, serde_json::Value>> for JsonRpcError {
+    fn into(self) -> jsonrpc::Response<'static, serde_json::Value> {
+        jsonrpc::Response::new(
+            jsonrpc::ResponsePayload::error(jsonrpc::ErrorObjectOwned::owned::<Vec<String>>(
                 self.code.code(),
                 self.message,
                 self.data,
             )),
-            self.id.unwrap_or(Id::Null),
+            self.id.unwrap_or(jsonrpc::Id::Null),
         )
     }
 }
@@ -185,7 +184,8 @@ async fn process_request(request: String) -> Result<Option<String>, JsonRpcError
             let response = handle_request(request).await?;
 
             // Wrap it in the standard JSON-RPC response
-            let response = Response::new(ResponsePayload::success(response), id.clone());
+            let response =
+                jsonrpc::Response::new(jsonrpc::ResponsePayload::success(response), id.clone());
 
             // Serialize the response
             let response =
@@ -202,7 +202,7 @@ async fn process_request(request: String) -> Result<Option<String>, JsonRpcError
             // in the resulting error
             let id = invalid.id.into_owned();
             let response = JsonRpcError::invalid_request(id.clone());
-            let response: Response<'_, _> = response.into();
+            let response: jsonrpc::Response<'_, _> = response.into();
             let response =
                 serde_json::to_string(&response).map_err(|e| JsonRpcError::ser(e, id))?;
             Ok(Some(response))
@@ -211,9 +211,9 @@ async fn process_request(request: String) -> Result<Option<String>, JsonRpcError
 }
 
 /// Handle an individual MCP request
-async fn handle_request(request: Request<'_>) -> Result<serde_json::Value, JsonRpcError> {
+async fn handle_request(request: jsonrpc::Request<'_>) -> Result<serde_json::Value, JsonRpcError> {
     // Handle different method calls
-    let Request {
+    let jsonrpc::Request {
         method, params, id, ..
     } = request;
 
@@ -268,7 +268,7 @@ async fn handle_request(request: Request<'_>) -> Result<serde_json::Value, JsonR
 
 fn deser_params<P: serde::de::DeserializeOwned>(
     params: Option<Cow<'_, serde_json::value::RawValue>>,
-    id: &Id<'_>,
+    id: &jsonrpc::Id<'_>,
 ) -> Result<P, JsonRpcError> {
     // If this is called, then the method expects params, so the lack of params is a protocol error
     let params = params.ok_or_else(|| JsonRpcError::invalid_params(id.clone().into_owned()))?;
@@ -278,13 +278,13 @@ fn deser_params<P: serde::de::DeserializeOwned>(
 
 /// Helper to send error responses
 fn make_error_response(error: anyhow::Error) -> Result<String> {
-    let response = Response::<()>::new(
-        ResponsePayload::error(ErrorObjectOwned::owned::<()>(
-            ErrorCode::InternalError.code(),
+    let response = jsonrpc::Response::<()>::new(
+        jsonrpc::ResponsePayload::error(jsonrpc::ErrorObjectOwned::owned::<()>(
+            jsonrpc::ErrorCode::InternalError.code(),
             format!("{:?}", error),
             None,
         )),
-        Id::Null,
+        jsonrpc::Id::Null,
     );
 
     Ok(serde_json::to_string(&response)?)
