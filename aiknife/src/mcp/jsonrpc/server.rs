@@ -1,116 +1,8 @@
 //! JSON RPC implementation that's specific to JSON RPC servers
 use super::shared as jsonrpc;
 use std::borrow::Cow;
+use std::convert::Infallible;
 use tracing::*;
-
-type ConnectionNotificationSender = tokio::sync::mpsc::Sender<String>;
-
-/// Channel receiver for notifications sent asynchronously from the server, to the client, but not
-/// in response to a specific client request.
-type ConnectionNotificationReceiver = tokio::sync::mpsc::Receiver<String>;
-
-type BroadcastNotificationSender = tokio::sync::broadcast::Sender<String>;
-
-/// The counterpart to [`NotificationReceiver`] that is used to receive notifications that are
-/// broadcast to all clients.
-type BroadcastNotificationReceiver = tokio::sync::broadcast::Receiver<String>;
-
-/// The type of notification received from either the connection-specific channel or the broadcast channel.
-#[derive(Debug, PartialEq)]
-pub(crate) enum NotificationKind {
-    /// A notification that was broadcast to all clients
-    Broadcast(String),
-    /// A notification that was sent specifically to this client
-    Connection(String),
-    /// Indicates that some broadcast messages were missed due to the receiver falling behind
-    Lagged(u64),
-}
-
-/// Handle which has access to the notification channels for both a specific connection and the
-/// broadcast channel for all connections.
-///
-/// When polled using it's [`Stream`] implementation, it will yield the next notification, either
-/// from the server's connection handler for the specific connection that this receiver is
-/// associated with, or from the broadcast channel.
-#[derive(Debug)]
-pub(crate) struct NotificationReceiver {
-    connection_receiver: Option<ConnectionNotificationReceiver>,
-    broadcast_receiver: Option<BroadcastNotificationReceiver>,
-}
-
-impl NotificationReceiver {
-    fn new(
-        connection_receiver: ConnectionNotificationReceiver,
-        broadcast_receiver: BroadcastNotificationReceiver,
-    ) -> Self {
-        Self {
-            connection_receiver: Some(connection_receiver),
-            broadcast_receiver: Some(broadcast_receiver),
-        }
-    }
-
-    pub async fn recv(&mut self) -> Option<NotificationKind> {
-        loop {
-            match (
-                self.connection_receiver.as_mut(),
-                self.broadcast_receiver.as_mut(),
-            ) {
-                (None, None) => return None,
-                (Some(conn), None) => {
-                    if let Some(notification) = conn.recv().await {
-                        return Some(NotificationKind::Connection(notification));
-                    } else {
-                        // This connection is closed, so don't poll it anymore
-                        self.connection_receiver = None;
-                    }
-                }
-                (None, Some(broadcast)) => {
-                    match broadcast.recv().await {
-                        Ok(notification) => return Some(NotificationKind::Broadcast(notification)),
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                            warn!(missed_messages = n, "Broadcast receiver for this connection fell behind and missed some broadcast messages");
-                            return Some(NotificationKind::Lagged(n));
-                        }
-                        Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                            // The broadcast channel is closed, so don't poll it anymore
-                            self.broadcast_receiver = None;
-                        }
-                    }
-                }
-                (Some(conn), Some(broadcast)) => {
-                    // Both recv futures should be cancel-safe, so just return the first one that
-                    // resolves
-
-                    tokio::select! {
-                        // Try to receive from the connection channel
-                        result = conn.recv() => {
-                            if let Some(notification) = result {
-                                return Some(NotificationKind::Connection(notification));
-                            } else {
-                                // This connection is closed, so don't poll it anymore
-                                self.connection_receiver = None;
-                            }
-                        },
-                        // Try to receive from the broadcast channel
-                        broadcast_result = broadcast.recv() => {
-                            match broadcast_result {
-                                Ok(notification) => return Some(NotificationKind::Broadcast(notification)),
-                                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                                    warn!(missed_messages = n, "Broadcast receiver for this connection fell behind and missed some broadcast messages");
-                                    return Some(NotificationKind::Lagged(n))
-                                },
-                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                                    // The broadcast channel is closed, so don't poll it anymore
-                                    self.broadcast_receiver = None;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
 /// A JSON-RPC service that can handle incoming connections and requests, with as little coupling
 /// to the underlying transport as possible.
@@ -124,7 +16,7 @@ pub(crate) trait JsonRpcService: Sync + Send + 'static {
     /// the client.
     ///
     /// Most implementations should not need to modify this.
-    fn max_pending_notifications(&self) -> usize {
+    fn max_pending_notifications() -> usize {
         100
     }
 
@@ -180,6 +72,7 @@ pub(crate) trait JsonRpcConnectionHandler: Send + Sync + 'static {
 /// TODO: fill this out.
 #[derive(Clone, Debug)]
 pub(crate) struct ConnectionContext {
+    /// Channel to send notifications to the client connected to this connection
     server_notification_sender: ConnectionNotificationSender,
 }
 
@@ -244,18 +137,97 @@ impl ConnectionContext {
     }
 }
 
+#[derive(Clone, Debug)]
+pub(crate) struct ServiceContext {
+    server_broadcast_sender: BroadcastNotificationSender,
+}
+
+/// Abstraction for anything that creates a new instance of a JSON RPC service.
+///
+/// In almost all cases, the implementation on `FnOnce` is sufficient.
+pub(crate) trait JsonRpcServiceConstructor: Send + 'static {
+    /// The service that is being constructed
+    type Service: JsonRpcService;
+
+    /// The error type that can be returned when creating a new service, in case service creation
+    /// is fallible.  Use `Infallible` if the service creation is infallible.`
+    type Error;
+
+    fn create_service(self, service_context: ServiceContext) -> Result<Self::Service, Self::Error>;
+}
+
+/// Convenience impl of `JsonRpcServiceConstructor` for any function that can create a service
+impl<F, S, E> JsonRpcServiceConstructor for F
+where
+    F: FnOnce(ServiceContext) -> Result<S, E> + Send + 'static,
+    S: JsonRpcService,
+{
+    type Service = S;
+    type Error = E;
+
+    fn create_service(self, service_context: ServiceContext) -> Result<S, E> {
+        self(service_context)
+    }
+}
+
 /// JSON RPC server which implements the JSON RPC-specific plumbing, then invokes some
 /// [`JsonRpcService`] trait impl to do the actual logic.
 pub(crate) struct JsonRpcServer<S> {
     service: S,
+
+    /// Channel that will receive broadcast notifications for all connected clients
+    /// This actually isn't ever used directly, due to a peculiarity of how tokio broadcast
+    /// channels work.  But when the server is first created, there are no connections, so
+    /// something must keep at least once broadcast receiver alive or the whole channel is closed.
+    broadcast_receiver: BroadcastNotificationReceiver,
+
+    /// A clone of the sender that goes w/ `broadcast_receiver`.  Tokio broadcast channels work
+    /// unlike the other kinds in that the receivers have to be obtained from the sender, so the
+    /// sender is kept here so that each new connection handler can have its own broadcast receiver
+    broadcast_sender: BroadcastNotificationSender,
 }
 
 impl<S> JsonRpcServer<S>
 where
     S: JsonRpcService,
 {
-    pub(crate) fn new(service: S) -> Self {
-        Self { service }
+    /// Create a new JSON-RPC server from a service constructor.
+    ///
+    /// Returns a tuple:
+    /// - The JSON RPC server instance, ready to be hooked up to a transport and start handling
+    ///   requests
+    /// - A [`BroadcastNotificationReceiver`] that will receive notifications that are broadcast to
+    ///   all connections by using [`ServiceContext::send_notification`].  This should also be
+    ///   provided to the transport, as the handling of broadcast notifications is transport-specific.
+    ///   TODO: Do we need to furnish a receiver here?  The transport can't do anything with events
+    ///   except when it's connected to a client, so it seems like the fact that the
+    ///   each connection handler is given a `NotificationReceiver` is sufficient.
+    pub(crate) fn from_service<Constructor>(
+        ctor: Constructor,
+    ) -> Result<
+        (
+            JsonRpcServer<Constructor::Service>,
+            BroadcastNotificationReceiver,
+        ),
+        Constructor::Error,
+    >
+    where
+        Constructor: JsonRpcServiceConstructor<Service = S>,
+    {
+        let bound = S::max_pending_notifications();
+        let (broadcast_sender, broadcast_receiver) = tokio::sync::broadcast::channel(bound);
+        let service = ctor.create_service(ServiceContext {
+            server_broadcast_sender: broadcast_sender.clone(),
+        })?;
+
+        Ok((
+            Self {
+                service,
+                broadcast_receiver: broadcast_receiver.clone(),
+                broadcast_sender,
+            },
+            broadcast_receiver,
+        ))
     }
 
     /// Start a new connection handler for what is presumed to be a new connection, however the
@@ -279,18 +251,20 @@ where
     ) -> Result<
         (
             JsonRpcServerConnection<S::ConnectionHandler>,
-            ConnectionNotificationReceiver,
+            NotificationReceiver,
         ),
         jsonrpc::JsonRpcError,
     > {
-        let (sender, receiver) =
-            tokio::sync::mpsc::channel(self.service.max_pending_notifications());
+        let (sender, receiver) = tokio::sync::mpsc::channel(S::max_pending_notifications());
         let context = ConnectionContext {
             server_notification_sender: sender.clone(),
         };
         let handler = self.service.handle_connection(context).await?;
 
-        Ok((JsonRpcServerConnection::new(handler, sender), receiver))
+        Ok((
+            JsonRpcServerConnection::new(handler, sender),
+            NotificationReceiver::new(receiver, self.broadcast_sender.subscribe()),
+        ))
     }
 }
 
@@ -310,6 +284,38 @@ where
             server_notification_sender,
         }
     }
+
+    // TODO: Brain fried.
+    //
+    // Code doesn't quite compile.  I added a return value to `from_service` that also provides a
+    // broadcast receiver, but I now don't think that makes sense.  Broadcast and connection
+    // notifications are already unified in `NotificationReceiver`, and there's nothing that a
+    // transport can do with any notification, broadcast or otherwise, except as part of handling a
+    // connection.
+    //
+    // But then i thought about the actual MCP impl.  Broadcast messages are needed to implement
+    // notifications that prompts/resources/whatever have changed.  But only if a client has
+    // indicated that capability.  So the actual JSON RPC service logic needs to look at each
+    // notification in the context of a specific connection and decide whether to deliver it or
+    // not, and perhaps in the future will need to permute it.
+    //
+    // Okay, well now that opens up a can of worms.  We can't be passing `String` around anymore
+    // because that's hugely wasteful as we have to re-parse the JSON again.  But we can't have a
+    // single notification type because our generated JSON schema has separate structs for each
+    // notification type.  So are notifications some custom type specific to the service, and each
+    // service impl has to make it a struct or an enum or whatever?  Ugh?
+    //
+    // And let's say we solve that problem.  How do we hook the service code into the processing of
+    // events?.  Right now that comes from the NotificationReceiver, which for obvious reasons
+    // holds no reference back to the impl.  It would need to hold a copy of the JSON service
+    // connection handler.  And up to this point those were not unconditionally `Clone`, nor were
+    // they `Sync`.  Do we hack around that?  Is there some other, less utterly horrifying way to
+    // handle this event case?  Maybe we're conflating app-layer events like "new prompts
+    // available" with the JSON RPC broadcast notification concept, which BTW isn't even in the
+    // spec.
+    //
+    // Look at the typescript SDK and a server impl, maybe there will be some inspiration there.
+
     /// Handle a JSON RPC request represented as a JSON string.
     ///
     /// Both success and error responses are also objects serialized to JSON
@@ -439,6 +445,122 @@ pub(crate) fn expect_params<P: serde::de::DeserializeOwned>(
         error!(error = %e, params = params.get(), "Error deserializing params");
         jsonrpc::JsonRpcError::invalid_params(id.clone().into_owned())
     })
+}
+
+type ConnectionNotificationSender = tokio::sync::mpsc::Sender<String>;
+
+/// Channel receiver for notifications sent asynchronously from the server, to the client, but not
+/// in response to a specific client request.
+type ConnectionNotificationReceiver = tokio::sync::mpsc::Receiver<String>;
+
+type BroadcastNotificationSender = tokio::sync::broadcast::Sender<String>;
+
+/// The counterpart to [`NotificationReceiver`] that is used to receive notifications that are
+/// broadcast to all clients.
+type BroadcastNotificationReceiver = tokio::sync::broadcast::Receiver<String>;
+
+/// The type of notification received from either the connection-specific channel or the broadcast channel.
+#[derive(Debug, PartialEq)]
+pub(crate) enum NotificationKind {
+    /// A notification that was broadcast to all clients
+    Broadcast(String),
+    /// A notification that was sent specifically to this client
+    Connection(String),
+    /// Indicates that some broadcast messages were missed due to the receiver falling behind
+    Lagged(u64),
+}
+
+/// Handle which has access to the notification channels for both a specific connection and the
+/// broadcast channel for all connections.
+///
+/// When polled using its [`Self::recv`] function, it will yield the next notification, either
+/// from the server's connection handler for the specific connection that this receiver is
+/// associated with, or from the broadcast channel.
+///
+/// # Note
+///
+/// Because this pulls from both the broadcast receiver and the connection receiver, it can
+/// possibly return a broadcast notification even after the connection (and the associated
+/// connection notification sender) has closed.  However it's unlikely that there would be very
+/// many such notifications because this receiver detects that the connection's notification
+/// channel is closed (indicating that the async process that produces channel notifications has
+/// terminated), and subsequently returns `None`.
+#[derive(Debug)]
+pub(crate) struct NotificationReceiver {
+    connection_receiver: Option<ConnectionNotificationReceiver>,
+    broadcast_receiver: Option<BroadcastNotificationReceiver>,
+}
+
+impl NotificationReceiver {
+    fn new(
+        connection_receiver: ConnectionNotificationReceiver,
+        broadcast_receiver: BroadcastNotificationReceiver,
+    ) -> Self {
+        Self {
+            connection_receiver: Some(connection_receiver),
+            broadcast_receiver: Some(broadcast_receiver),
+        }
+    }
+
+    /// Waits for the next notification from either the connection-specific channel or the broadcast
+    /// channel that is shared by all connections in the service.
+    ///
+    /// Returns `None` once the connection-specific channel is closed, which means no more
+    /// connection-specific events will be received, which usually means that the connection has
+    /// been closed by the transport.
+    pub async fn recv(&mut self) -> Option<NotificationKind> {
+        loop {
+            match (
+                self.connection_receiver.as_mut(),
+                self.broadcast_receiver.as_mut(),
+            ) {
+                (None, _) => {
+                    // The connection channel is closed, so no more notifications should be
+                    // furnished to this connection, even though the broadcast channel is likely
+                    // still around
+                    return None;
+                }
+                (Some(conn), None) => {
+                    if let Some(notification) = conn.recv().await {
+                        return Some(NotificationKind::Connection(notification));
+                    } else {
+                        // This connection is closed, so don't poll it anymore
+                        self.connection_receiver = None;
+                    }
+                }
+                (Some(conn), Some(broadcast)) => {
+                    // Both recv futures should be cancel-safe, so just return the first one that
+                    // resolves
+
+                    tokio::select! {
+                        // Try to receive from the connection channel
+                        result = conn.recv() => {
+                            if let Some(notification) = result {
+                                return Some(NotificationKind::Connection(notification));
+                            } else {
+                                // This connection is closed, so don't poll it anymore
+                                self.connection_receiver = None;
+                            }
+                        },
+                        // Try to receive from the broadcast channel
+                        broadcast_result = broadcast.recv() => {
+                            match broadcast_result {
+                                Ok(notification) => return Some(NotificationKind::Broadcast(notification)),
+                                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                    warn!(missed_messages = n, "Broadcast receiver for this connection fell behind and missed some broadcast messages");
+                                    return Some(NotificationKind::Lagged(n))
+                                },
+                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                                    // The broadcast channel is closed, so don't poll it anymore
+                                    self.broadcast_receiver = None;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
