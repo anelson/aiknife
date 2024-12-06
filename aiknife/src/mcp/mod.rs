@@ -3,8 +3,8 @@ use std::borrow::Cow;
 use tracing::*;
 
 mod jsonrpc;
-mod transport;
 mod server;
+mod transport;
 #[allow(dead_code, irrefutable_let_patterns)]
 mod types;
 

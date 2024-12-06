@@ -6,13 +6,14 @@ members = [
   "aik",
   "instoken",
   "instoken-bench",
-  "aiknife-ui/src-tauri",
+  "aiknife-ui/src-tauri", "aiknife-jsonrpc",
 ]
 
 [workspace.dependencies]
 aho-corasick       = "0.7.20"
 aiknife            = { path = "../../aiknife" }
 anyhow             = "1.0"
+assert_matches     = "1.5.0"
 assertables        = "9.4.0"
 async-openai       = "0.25"
 async-trait        = "0.1.83"
@@ -21,6 +22,8 @@ clap               = { version = "4.1.13", features = ["derive", "env"] }
 cpal               = "0.15.3"
 crossbeam          = { version = "0.8.4", features = ["crossbeam-channel"] }
 ctrlc              = "3.4.5"
+downcast-rs        = "1.2.1"
+dyn-clone          = "1.0.17"
 either             = "1.13.0"
 expect-test        = "1.5.0"
 expectorate        = "1.1.0"
