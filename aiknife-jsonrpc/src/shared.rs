@@ -1,13 +1,9 @@
-use std::fmt::{Display, Formatter};
-
 use anyhow::Result;
 use jsonrpsee_types as jsonrpc;
+use std::fmt::{Display, Formatter};
 
 /// Re-use some of the heavy lifting done in jsonrpsee, pretending as if these are our own types
-pub(crate) use jsonrpc::{
-    ErrorCode, ErrorObjectOwned, Id, NotificationSer, Request, Response, ResponsePayload,
-    TwoPointZero,
-};
+pub(crate) use jsonrpc::{Id, Request, Response, ResponsePayload, TwoPointZero};
 
 /// Type that tells `serde_json` that we expect a valid JSON value, but we want to defer parsing it
 /// until later.  This is used in the JSON RPC impl code where we don't yet know what specific Rust
@@ -29,7 +25,7 @@ pub(crate) type Notification<'a, T = Option<GenericParams<'a>>> = jsonrpc::Notif
 
 /// The response type that has a generic JSON payload.  The actual type of the payload is
 /// method-specific and is not known at the level of the JSON-RPC impl
-pub(crate) type GenericResponse = Response<'static, serde_json::Value>;
+pub type GenericResponse = Response<'static, serde_json::Value>;
 
 /// Possible kinds of messages sent to servers from JSON-RPC clients
 #[derive(Debug)]
@@ -71,7 +67,7 @@ impl<'a> JsonRpcClientMessage<'a> {
 ///
 /// Uses the error codes defined in the JSON-RPC spec.
 #[derive(Debug)]
-pub(crate) struct JsonRpcError {
+pub struct JsonRpcError {
     code: jsonrpc::ErrorCode,
     message: String,
     id: Option<jsonrpc::Id<'static>>,
