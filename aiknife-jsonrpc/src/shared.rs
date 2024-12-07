@@ -79,12 +79,14 @@ impl Display for JsonRpcError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "JsonRpcError {{ code: {}, message: {} }}",
+            "JSON-RPC error {}: {}",
             self.code.message(),
             self.message
         )
     }
 }
+
+impl std::error::Error for JsonRpcError {}
 
 impl JsonRpcError {
     fn new(

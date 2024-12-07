@@ -42,10 +42,7 @@ pub trait JsonRpcConnectionHandler: Clone + Send + Sync + 'static {
         // By default, no methods are supported
         warn!("Default trait impl rejects all method invocations.  Implement `handle_method` to override");
 
-        Err(jsonrpc::JsonRpcError::method_not_found(
-            request.method().to_string(),
-            request.id().into_owned(),
-        ))
+        request.unknown_method()
     }
 
     /// Handle a JSON-RPC notification (which is like a method invocation, but no response is
@@ -128,6 +125,14 @@ impl<'a> MethodRequest<'a> {
     ) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
         serde_json::to_value(response)
             .map_err(|e| jsonrpc::JsonRpcError::ser(e, self.id.clone().into_owned()))
+    }
+
+    /// Produce a response to a method request indicating that the method is not found
+    pub fn unknown_method(&self) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
+        Err(jsonrpc::JsonRpcError::method_not_found(
+            self.method().to_string(),
+            self.id.clone().into_owned(),
+        ))
     }
 }
 
@@ -358,6 +363,18 @@ where
 pub(crate) struct JsonRpcServerConnection<H> {
     handler: H,
     server_notification_sender: ConnectionNotificationSender,
+}
+
+impl<H> Clone for JsonRpcServerConnection<H>
+where
+    H: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            handler: self.handler.clone(),
+            server_notification_sender: self.server_notification_sender.clone(),
+        }
+    }
 }
 
 impl<H> JsonRpcServerConnection<H>
