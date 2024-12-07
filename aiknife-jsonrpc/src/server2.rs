@@ -1,36 +1,10 @@
 //! JSON RPC implementation that's specific to JSON RPC servers
 #![allow(dead_code)] // TODO: Remove after impl is done
 use super::shared as jsonrpc;
-use downcast_rs::Downcast;
-use dyn_clone::DynClone;
 use std::any::Any;
 use std::borrow::Cow;
 use std::fmt::Debug;
 use tracing::*;
-
-/// Marker trait that is auto-implemented for all types that implement `Any` and `Clone`
-///
-/// This allows them to be boxed and used as [`BackgroundEvent`]s.
-///
-/// This is automatically implemented for all suitable types; callers should never have to interact
-/// with this trait.
-///
-/// TODO: `Debug` is just to let us `unwrap()` in tests.  Maybe make that required only in builds
-/// with tests enabled.
-#[doc(hidden)]
-pub trait BroadcastEventT: Downcast + Debug + Any + DynClone + Send + 'static {}
-downcast_rs::impl_downcast!(BroadcastEventT);
-
-impl<T> BroadcastEventT for T where T: Debug + Any + DynClone + Send + 'static {}
-
-/// The type that is sent to all connection handlers and the service itself when a broadcast event
-/// is sent.
-///
-/// This is as close to runtime polymorphism as we can get in Rust.
-///
-/// In order to be usable as a broadcast event, a type must be `Clone` and `Send`.  Technically it
-/// must also implement `Any`, but that is implemented automatically.
-pub type BroadcastEvent = Box<dyn BroadcastEventT>;
 
 /// A JSON-RPC service that can handle incoming connections and requests, with as little coupling
 /// to the underlying transport as possible.
@@ -48,19 +22,6 @@ pub trait JsonRpcService: Sync + Send + 'static {
         &self,
         context: ConnectionContext,
     ) -> Result<Self::ConnectionHandler, jsonrpc::JsonRpcError>;
-
-    /// Handle a broadcast event sent to all clients.
-    ///
-    /// In most cases handling this will be specific to the actual active connection, and not the
-    /// entire server, however the server is also given a chance to respond to the event.
-    async fn handle_broadcast_event(
-        &self,
-        event: BroadcastEvent,
-    ) -> Result<(), jsonrpc::JsonRpcError> {
-        let _ = event;
-
-        Ok(())
-    }
 }
 
 /// The handler for a single JSON-RPC connection.
@@ -117,21 +78,9 @@ pub trait JsonRpcConnectionHandler: Clone + Send + Sync + 'static {
     }
 }
 
-/// Context specific to a single JSON RPC method call request
-#[derive(Clone, Debug)]
-pub struct MethodContext {
-    abort_token: tokio_util::sync::CancellationToken,
-
-    // TODO: flesh out.  Remember that progress has to be explicitly requested by the client or
-    // progress updates should not be generated.
-    progress_sender: tokio::sync::mpsc::Sender<()>,
-}
-
 /// A request from a client to invoke a method over JSON RPC
 #[derive(Clone, Debug)]
 pub struct MethodRequest<'a> {
-    context: MethodContext,
-
     id: jsonrpc::Id<'a>,
     method: Cow<'a, str>,
     params: Option<Cow<'a, serde_json::value::RawValue>>,
@@ -140,21 +89,12 @@ pub struct MethodRequest<'a> {
 impl<'a> MethodRequest<'a> {
     /// Given an input [`jsonrpc::Request`], bundle it into a MethodRequest for passing to
     /// handlers.
-    fn from_jsonrpc_request(context: MethodContext, request: jsonrpc::Request<'a>) -> Self {
+    fn from_jsonrpc_request(request: jsonrpc::Request<'a>) -> Self {
         let jsonrpc::Request {
             id, method, params, ..
         } = request;
 
-        MethodRequest::<'_> {
-            context,
-            id,
-            method,
-            params,
-        }
-    }
-
-    pub fn context(&self) -> &MethodContext {
-        &self.context
+        MethodRequest::<'_> { id, method, params }
     }
 
     pub fn id(&self) -> jsonrpc::Id<'a> {
@@ -165,7 +105,7 @@ impl<'a> MethodRequest<'a> {
         self.method.as_ref()
     }
 
-    pub fn params(&'a self) -> Option<&'a serde_json::value::RawValue> {
+    pub fn raw_params(&'a self) -> Option<&'a serde_json::value::RawValue> {
         // It's not clear why jsonrpsee `jsonrpc::Request` structs use `Option<Cow<RawValue>>` while the
         // jsonrpc::Notification uses `Option<&RawValue>`.  For consistency, both the method and
         // notification handlers just take `Option<&RawValue>`, so jump through some hoops to hide
@@ -177,10 +117,18 @@ impl<'a> MethodRequest<'a> {
     ///
     /// If this fails, a friendly JSON RPC error is produced suitable for returning directly to the
     /// client
-    pub fn expect_params<P: serde::de::DeserializeOwned>(
+    pub fn params<P: serde::de::DeserializeOwned>(&self) -> Result<P, jsonrpc::JsonRpcError> {
+        expect_params(&self.id, self.raw_params())
+    }
+
+    /// Package the response to a method request into a JSON object suitable for sending back to the
+    /// client
+    pub fn respond<T: serde::Serialize>(
         &self,
-    ) -> Result<P, jsonrpc::JsonRpcError> {
-        expect_params(&self.id, self.params())
+        response: &T,
+    ) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
+        serde_json::to_value(response)
+            .map_err(|e| jsonrpc::JsonRpcError::ser(e, self.id.clone().into_owned()))
     }
 }
 
@@ -202,18 +150,16 @@ impl<'a> NotificationRequest<'a> {
         self.method.as_ref()
     }
 
-    pub fn params(&self) -> Option<&serde_json::value::RawValue> {
+    pub fn raw_params(&self) -> Option<&serde_json::value::RawValue> {
         self.params
     }
 
     /// Attempt to decode the parameters of the request into a Rust type
     ///
-    /// If this fails, a friendly JSON RPC error is produced suitable for returning directly to the
-    /// client
-    pub fn expect_params<P: serde::de::DeserializeOwned>(
-        &self,
-    ) -> Result<P, jsonrpc::JsonRpcError> {
-        expect_params(&jsonrpc::Id::Null, self.params.clone())
+    /// If this fails, a friendly JSON RPC error is produced, although the client itself will never
+    /// see it since notifications do not have responses, even in the case of an error.
+    pub fn params<P: serde::de::DeserializeOwned>(&self) -> Result<P, jsonrpc::JsonRpcError> {
+        expect_params(&jsonrpc::Id::Null, self.raw_params())
     }
 }
 
@@ -288,40 +234,9 @@ impl ConnectionContext {
 }
 
 #[derive(Clone, Debug)]
-pub struct ServiceContext {
-    server_broadcast_sender: BroadcastNotificationSender,
-}
+pub struct ServiceContext {}
 
-impl ServiceContext {
-    /// Send a broadcast notification to all connection handlers (and the service itself)
-    ///
-    /// See [`BroadcastEvent`] for more information on how to create a broadcast event.
-    ///
-    /// Note that this operation is infallible.  Broadcast events can fail to send, if there are no
-    /// receivers, however that is not considered an error and it only logged.
-    ///
-    /// The service itself as well as all active connection handler instances will have the ability
-    /// to receive broadcast events; whether they actually do or not depends upon their
-    /// implementation.
-    pub async fn send_broadcast_event<T, EventT>(&self, event: T)
-    where
-        T: Into<EventT>,
-        EventT: BroadcastEventT,
-    {
-        let event = Box::new(event.into());
-
-        if self
-            .server_broadcast_sender
-            .send(BroadcastEventContainer(event))
-            .is_err()
-        {
-            error!(
-                event_type = std::any::type_name::<EventT>(),
-                "Error while sending broadcast notification; notification was not sent"
-            );
-        }
-    }
-}
+impl ServiceContext {}
 
 /// Abstraction for anything that creates a new instance of a JSON RPC service.
 ///
@@ -380,21 +295,6 @@ pub struct JsonRpcServer<S> {
     config: JsonRpcServerConfig,
 
     service: S,
-
-    /// Channel that will receive broadcast notifications for all connected clients
-    /// This actually isn't ever used directly, due to a peculiarity of how tokio broadcast
-    /// channels work.  But when the server is first created, there are no connections, so
-    /// something must keep at least once broadcast receiver alive or the whole channel is closed.
-    broadcast_receiver: BroadcastNotificationReceiver,
-
-    /// A clone of the sender that goes w/ `broadcast_receiver`.  Tokio broadcast channels work
-    /// unlike the other kinds in that the receivers have to be obtained from the sender, so the
-    /// sender is kept here so that each new connection handler can have its own broadcast receiver
-    ///
-    /// TODO: THIS IS NOT TRUE!  If there are no receivers, then send operations fail, but they
-    /// will start to succeed again if any receivers are created with the `subscribe()` method.
-    /// Rework this.
-    broadcast_sender: BroadcastNotificationSender,
 }
 
 impl<S> JsonRpcServer<S>
@@ -403,44 +303,19 @@ where
 {
     /// Create a new JSON-RPC server from a service constructor.
     ///
-    /// Returns a tuple:
-    /// - The JSON RPC server instance, ready to be hooked up to a transport and start handling
-    ///   requests
-    /// - A [`BroadcastNotificationReceiver`] that will receive notifications that are broadcast to
-    ///   all connections by using [`ServiceContext::send_notification`].  This should also be
-    ///   provided to the transport, as the handling of broadcast notifications is transport-specific.
-    ///   TODO: Do we need to furnish a receiver here?  The transport can't do anything with events
-    ///   except when it's connected to a client, so it seems like the fact that the
-    ///   each connection handler is given a `NotificationReceiver` is sufficient.
+    /// Returns the JSON RPC server instance, ready to be hooked up to a transport and start handling
+    /// requests
     pub fn from_service<Constructor>(
         config: JsonRpcServerConfig,
         ctor: Constructor,
-    ) -> Result<
-        (
-            JsonRpcServer<Constructor::Service>,
-            BroadcastNotificationReceiver,
-        ),
-        Constructor::Error,
-    >
+    ) -> Result<JsonRpcServer<Constructor::Service>, Constructor::Error>
     where
         Constructor: JsonRpcServiceConstructor<Service = S>,
     {
         let bound = config.max_pending_notifications;
-        let (broadcast_sender, broadcast_receiver) =
-            tokio::sync::broadcast::channel::<BroadcastEventContainer>(bound);
-        let service = ctor.create_service(ServiceContext {
-            server_broadcast_sender: broadcast_sender.clone(),
-        })?;
+        let service = ctor.create_service(ServiceContext {})?;
 
-        Ok((
-            Self {
-                config,
-                service,
-                broadcast_receiver: broadcast_sender.subscribe(),
-                broadcast_sender,
-            },
-            broadcast_receiver,
-        ))
+        Ok(Self { config, service })
     }
 
     /// Start a new connection handler for what is presumed to be a new connection, however the
@@ -476,7 +351,7 @@ where
 
         Ok((
             JsonRpcServerConnection::new(handler, sender),
-            NotificationReceiver::new(receiver, self.broadcast_sender.subscribe()),
+            NotificationReceiver::new(receiver),
         ))
     }
 }
@@ -505,7 +380,7 @@ where
     /// If the request was a notification, then the result will be `Ok(None)` since notifications do
     /// not have responses.
     #[instrument(skip_all, fields(request_len = request.len()))]
-    pub async fn handle_request<'a>(&self, request: String) -> Result<Option<String>, String> {
+    pub async fn handle_request(&self, request: String) -> Result<Option<String>, String> {
         self.handle_request_internal(request)
             .await
             .map_err(|e| e.into_json_rpc_response())
@@ -565,8 +440,7 @@ where
         &self,
         request: jsonrpc::Request<'a>,
     ) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
-        let context: MethodContext = todo!();
-        let request = MethodRequest::from_jsonrpc_request(context, request);
+        let request = MethodRequest::from_jsonrpc_request(request);
 
         self.handler.handle_method(request).await
     }
@@ -574,10 +448,8 @@ where
     /// Handle a JSON-RPC notification (which is like a method invocation, but no response is
     /// expected).
     ///
-    /// Note that this operation is fallible only so that the server implementation can log errors
-    /// handling notifications if it is interested in doing so.  No error will be returned to the
-    /// client because according to the JSON RPC spec servers MUST NOT return any response to
-    /// notifications
+    /// Note that according to the spec, servers MUST NOT return any response to notifications.
+    /// Therefore, any error encountered while handling a notification is logged, but not returned.
     #[instrument(skip_all, fields(method = %request.method))]
     async fn handle_notification<'a>(&self, request: jsonrpc::Notification<'a>) -> () {
         let request = NotificationRequest::from_jsonrpc_notification(request);
@@ -588,15 +460,6 @@ where
     }
 }
 
-/// Helper for RPC server impls to concisely serialize their method responses to JSON
-pub(crate) fn json_response<T: serde::Serialize>(
-    id: &jsonrpc::Id,
-    response: &T,
-) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
-    serde_json::to_value(response)
-        .map_err(|e| jsonrpc::JsonRpcError::ser(e, id.clone().into_owned()))
-}
-
 /// Helper for RPC server impls to deserialize their expected parameters struct from the JSON
 /// request.  Properly handles error reporting.
 ///
@@ -605,7 +468,7 @@ pub(crate) fn json_response<T: serde::Serialize>(
 /// Calling this function assumes that the request is expected to have `params`.  If `params` are
 /// missing, this will report an error.  If your request doesn't expect params, then do not call
 /// this method.
-pub(crate) fn expect_params<P: serde::de::DeserializeOwned>(
+fn expect_params<P: serde::de::DeserializeOwned>(
     id: &jsonrpc::Id,
     params: Option<&serde_json::value::RawValue>,
 ) -> Result<P, jsonrpc::JsonRpcError> {
@@ -619,155 +482,39 @@ pub(crate) fn expect_params<P: serde::de::DeserializeOwned>(
     })
 }
 
-/// Newtype hack to allow for a `Box<dyn BroadcastEventT>` to be cloned
-struct BroadcastEventContainer(Box<dyn BroadcastEventT>);
-
-impl BroadcastEventContainer {
-    fn new(event: impl BroadcastEventT) -> Self {
-        Self(Box::new(event))
-    }
-}
-
-impl Clone for BroadcastEventContainer {
-    fn clone(&self) -> Self {
-        Self(dyn_clone::clone_box(&*self.0))
-    }
-}
-
-impl std::fmt::Debug for BroadcastEventContainer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("BroadcastEvent")
-            .field(&self.0.type_id())
-            .finish()
-    }
-}
-
 type ConnectionNotificationSender = tokio::sync::mpsc::Sender<String>;
 
 /// Channel receiver for notifications sent asynchronously from the server, to the client, but not
 /// in response to a specific client request.
-type ConnectionNotificationReceiver = tokio::sync::mpsc::Receiver<String>;
+pub type ConnectionNotificationReceiver = tokio::sync::mpsc::Receiver<String>;
 
-type BroadcastNotificationSender = tokio::sync::broadcast::Sender<BroadcastEventContainer>;
-
-/// The counterpart to [`NotificationReceiver`] that is used to receive notifications that are
-/// broadcast to all clients.
-type BroadcastNotificationReceiver = tokio::sync::broadcast::Receiver<BroadcastEventContainer>;
-
-/// The type of notification received from either the connection-specific channel or the broadcast channel.
-pub(crate) enum NotificationKind {
-    /// A notification that was broadcast to all clients
-    Broadcast(BroadcastEvent),
-    /// A notification that was sent specifically to this client
-    Connection(String),
-    /// Indicates that some broadcast messages were missed due to the receiver falling behind
-    Lagged(u64),
-}
-
-impl std::fmt::Debug for NotificationKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            NotificationKind::Broadcast(event) => {
-                f.debug_tuple("Broadcast").field(&event.type_id()).finish()
-            }
-            NotificationKind::Connection(notification) => {
-                f.debug_tuple("Connection").field(notification).finish()
-            }
-            NotificationKind::Lagged(n) => f.debug_tuple("Lagged").field(n).finish(),
-        }
-    }
-}
-
-/// Handle which has access to the notification channels for both a specific connection and the
-/// broadcast channel for all connections.
+/// Handle which has access to the notification channel of a specific connection.  This is meant to
+/// be used by the transport to obtain server-initiated notifications to be sent to the client.
 ///
-/// When polled using its [`Self::recv`] function, it will yield the next notification, either
-/// from the server's connection handler for the specific connection that this receiver is
-/// associated with, or from the broadcast channel.
-///
-/// # Note
-///
-/// Because this pulls from both the broadcast receiver and the connection receiver, it can
-/// possibly return a broadcast notification even after the connection (and the associated
-/// connection notification sender) has closed.  However it's unlikely that there would be very
-/// many such notifications because this receiver detects that the connection's notification
-/// channel is closed (indicating that the async process that produces channel notifications has
-/// terminated), and subsequently returns `None`.
+/// When polled using its [`Self::recv`] function, it will yield the next notification from the
+/// connection, or `None` when the connection is closed and no more notifications will be sent.
 #[derive(Debug)]
 pub(crate) struct NotificationReceiver {
-    connection_receiver: Option<ConnectionNotificationReceiver>,
-    broadcast_receiver: Option<BroadcastNotificationReceiver>,
+    connection_receiver: ConnectionNotificationReceiver,
 }
 
 impl NotificationReceiver {
-    fn new(
-        connection_receiver: ConnectionNotificationReceiver,
-        broadcast_receiver: BroadcastNotificationReceiver,
-    ) -> Self {
+    fn new(connection_receiver: ConnectionNotificationReceiver) -> Self {
         Self {
-            connection_receiver: Some(connection_receiver),
-            broadcast_receiver: Some(broadcast_receiver),
+            connection_receiver,
         }
     }
 
-    /// Waits for the next notification from either the connection-specific channel or the broadcast
-    /// channel that is shared by all connections in the service.
+    /// Waits for the next notification from the connection's channel.
     ///
     /// Returns `None` once the connection-specific channel is closed, which means no more
     /// connection-specific events will be received, which usually means that the connection has
     /// been closed by the transport.
-    pub async fn recv(&mut self) -> Option<NotificationKind> {
-        loop {
-            match (
-                self.connection_receiver.as_mut(),
-                self.broadcast_receiver.as_mut(),
-            ) {
-                (None, _) => {
-                    // The connection channel is closed, so no more notifications should be
-                    // furnished to this connection, even though the broadcast channel is likely
-                    // still around
-                    return None;
-                }
-                (Some(conn), None) => {
-                    if let Some(notification) = conn.recv().await {
-                        return Some(NotificationKind::Connection(notification));
-                    } else {
-                        // This connection is closed, so don't poll it anymore
-                        self.connection_receiver = None;
-                    }
-                }
-                (Some(conn), Some(broadcast)) => {
-                    // Both recv futures should be cancel-safe, so just return the first one that
-                    // resolves
-
-                    tokio::select! {
-                        // Try to receive from the connection channel
-                        result = conn.recv() => {
-                            if let Some(notification) = result {
-                                return Some(NotificationKind::Connection(notification));
-                            } else {
-                                // This connection is closed, so don't poll it anymore
-                                self.connection_receiver = None;
-                            }
-                        },
-                        // Try to receive from the broadcast channel
-                        broadcast_result = broadcast.recv() => {
-                            match broadcast_result {
-                                Ok(notification) => return Some(NotificationKind::Broadcast(notification.0)),
-                                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                                    warn!(missed_messages = n, "Broadcast receiver for this connection fell behind and missed some broadcast messages");
-                                    return Some(NotificationKind::Lagged(n))
-                                },
-                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                                    // The broadcast channel is closed, so don't poll it anymore
-                                    self.broadcast_receiver = None;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    ///
+    /// Notifications are JSON objects serialized to strings.  They should be sent verbatim to the
+    /// client over whatever transport the connection is using.
+    pub async fn recv(&mut self) -> Option<String> {
+        self.connection_receiver.recv().await
     }
 }
 
@@ -802,7 +549,7 @@ mod tests {
         ) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
             match request.method().as_ref() {
                 "echo" => {
-                    let params = request.expect_params::<serde_json::Value>()?;
+                    let params = request.params::<serde_json::Value>()?;
                     Ok(params)
                 }
                 "add" => {
@@ -811,7 +558,7 @@ mod tests {
                         a: i32,
                         b: i32,
                     }
-                    let params = request.expect_params::<AddParams>()?;
+                    let params = request.params::<AddParams>()?;
                     Ok(json!(params.a + params.b))
                 }
                 "trigger_server_notification" => {
@@ -896,15 +643,9 @@ mod tests {
             let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
             let normalized = serde_json::to_string_pretty(&parsed).unwrap();
 
-            assert_contents(
-                format!("src/mcp/jsonrpc/testdata/{}.json", test_name),
-                &normalized,
-            );
+            assert_contents(format!("src/testdata/{}.json", test_name), &normalized);
         } else {
-            assert_contents(
-                format!("src/mcp/jsonrpc/testdata/{}.json", test_name),
-                "null",
-            );
+            assert_contents(format!("src/testdata/{}.json", test_name), "null");
         }
     }
 
@@ -1052,16 +793,13 @@ mod tests {
         // Parse and normalize the notification JSON
         let parsed: serde_json::Value = serde_json::from_str(&notification).unwrap();
         let normalized = serde_json::to_string_pretty(&parsed).unwrap();
-        assert_contents(
-            "src/mcp/jsonrpc/testdata/single_server_notification.json",
-            &normalized,
-        );
+        assert_contents("src/testdata/single_server_notification.json", &normalized);
 
         // Parse and normalize the response JSON
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
         let normalized = serde_json::to_string_pretty(&parsed).unwrap();
         assert_contents(
-            "src/mcp/jsonrpc/testdata/single_server_notification_response.json",
+            "src/testdata/single_server_notification_response.json",
             &normalized,
         );
 
@@ -1081,10 +819,7 @@ mod tests {
             let parsed: serde_json::Value = serde_json::from_str(&notification).unwrap();
             let normalized = serde_json::to_string_pretty(&parsed).unwrap();
             assert_contents(
-                &format!(
-                    "src/mcp/jsonrpc/testdata/multiple_server_notification_{}.json",
-                    i
-                ),
+                &format!("src/testdata/multiple_server_notification_{}.json", i),
                 &normalized,
             );
         }
@@ -1093,7 +828,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
         let normalized = serde_json::to_string_pretty(&parsed).unwrap();
         assert_contents(
-            "src/mcp/jsonrpc/testdata/multiple_server_notifications_response.json",
+            "src/testdata/multiple_server_notifications_response.json",
             &normalized,
         );
 
@@ -1112,7 +847,7 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&notification).unwrap();
         let normalized = serde_json::to_string_pretty(&parsed).unwrap();
         assert_contents(
-            "src/mcp/jsonrpc/testdata/parameterless_server_notification.json",
+            "src/testdata/parameterless_server_notification.json",
             &normalized,
         );
 
@@ -1120,277 +855,8 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&response).unwrap();
         let normalized = serde_json::to_string_pretty(&parsed).unwrap();
         assert_contents(
-            "src/mcp/jsonrpc/testdata/parameterless_server_notification_response.json",
+            "src/testdata/parameterless_server_notification_response.json",
             &normalized,
         );
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_notification_receiver() {
-        use tokio::sync::broadcast;
-        use tokio::sync::mpsc;
-
-        // Create channels
-        let (conn_tx, conn_rx) = mpsc::channel(10);
-        let (broadcast_tx, broadcast_rx) = broadcast::channel(10);
-
-        let mut receiver = NotificationReceiver::new(conn_rx, broadcast_rx);
-
-        // Test connection message
-        conn_tx.send("conn_msg".to_string()).await.unwrap();
-        assert_matches!(
-            receiver.recv().await,
-            Some(NotificationKind::Connection(msg)) if msg == "conn_msg"
-        );
-
-        // Test broadcast message
-        broadcast_tx
-            .send(BroadcastEventContainer::new("broadcast_msg".to_string()))
-            .unwrap();
-        assert_matches!(
-            receiver.recv().await,
-            Some(NotificationKind::Broadcast(event)) => {
-                assert_eq!("broadcast_msg", event.downcast::<String>().unwrap().as_str());
-            }
-        );
-
-        // Test lagged broadcast messages
-        // According to the docs, lagging starts at the first integer power of 2 greater than the
-        // channel bound.  Channel bound is 10 so that means lagging starts at 16
-        for i in 0..17 {
-            broadcast_tx
-                .send(BroadcastEventContainer::new(format!("msg{}", i)))
-                .unwrap();
-        }
-        // Should get the Lagged notification
-        match receiver.recv().await {
-            Some(NotificationKind::Lagged(n)) => assert_eq!(n, 1), // We missed 1 message
-            other => panic!("Expected Lagged notification, got {:?}", other),
-        }
-        // We should receive all of the messages we sent, except for the oldest that we missed
-        for i in 1..17 {
-            let msg = dbg!(receiver.recv().await.unwrap());
-            assert!(matches!(msg, NotificationKind::Broadcast(_)));
-            if let NotificationKind::Broadcast(content) = msg {
-                assert_eq!(
-                    format!("msg{i}"),
-                    content.downcast::<String>().unwrap().as_str()
-                );
-            }
-        }
-
-        // Test closing connection sender
-        drop(conn_tx);
-        // Broadcast channel still open, should still receive broadcast messages
-        broadcast_tx
-            .send(BroadcastEventContainer::new("after_conn_close".to_string()))
-            .unwrap();
-        assert_matches!(
-            receiver.recv().await,
-            Some(NotificationKind::Broadcast(content)) => {
-                assert_eq!("after_conn_close",content.downcast::<String>().unwrap().as_str());
-            }
-        );
-
-        // Test closing broadcast sender
-        drop(broadcast_tx);
-        // Both channels closed, should return None
-        assert_matches!(receiver.recv().await, None);
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_notification_receiver_concurrent() {
-        use tokio::time::{sleep, Duration};
-
-        // Create channels
-        let (conn_tx, conn_rx) = mpsc::channel(10);
-        let (broadcast_tx, broadcast_rx) = broadcast::channel(10);
-
-        let mut receiver = NotificationReceiver::new(conn_rx, broadcast_rx);
-
-        // Spawn a task that sends connection messages after a delay
-        let conn_handle = tokio::spawn({
-            let conn_tx = conn_tx.clone();
-            async move {
-                sleep(Duration::from_millis(50)).await;
-                conn_tx.send("delayed_conn".to_string()).await.unwrap();
-            }
-        });
-
-        // Spawn a task that sends broadcast messages after a different delay
-        let broadcast_handle = tokio::spawn({
-            let broadcast_tx = broadcast_tx.clone();
-            async move {
-                sleep(Duration::from_millis(25)).await;
-                broadcast_tx
-                    .send(BroadcastEventContainer::new(
-                        "delayed_broadcast".to_string(),
-                    ))
-                    .unwrap();
-            }
-        });
-
-        // First message should be the broadcast message since it has a shorter delay
-        assert_matches!(
-            receiver.recv().await,
-            Some(NotificationKind::Broadcast(content)) => {
-                assert_eq!(
-        "delayed_broadcast",
-                    content.downcast::<String>().unwrap().as_str()
-            );
-            }
-        );
-        // Second message should be the connection message
-        assert_matches!(
-            receiver.recv().await,
-            Some(NotificationKind::Connection(content)) => {
-                assert_eq!("delayed_conn", &content);
-            }
-        );
-
-        // Wait for spawned tasks to complete
-        conn_handle.await.unwrap();
-        broadcast_handle.await.unwrap();
-
-        // Clean up
-        drop(conn_tx);
-        drop(broadcast_tx);
-        assert_matches!(receiver.recv().await, None);
-    }
-
-    /// Slam the notification receiver with a bunch of messages from multiple connection and
-    /// broadcast senders.
-    ///
-    /// The order in this case is non-deterministic, but the test is to make sure that nothing gets
-    /// missed.
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_notification_receiver_stress() {
-        const SENDERS: &[&str] = &[
-            "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india",
-            "juliet",
-        ];
-
-        fn generate_connection_messages(sender: &'static str) -> Vec<String> {
-            (0..100).map(|i| format!("{sender}-conn-{i}")).collect()
-        }
-
-        fn generate_broadcast_messages(sender: &'static str) -> Vec<String> {
-            (0..100)
-                .map(|i| format!("{sender}-broadcast-{i}"))
-                .collect()
-        }
-
-        let gen_conn = |sender| generate_connection_messages(sender);
-        let gen_broad = |sender| generate_broadcast_messages(sender);
-
-        // Create channels
-        let (conn_tx, conn_rx) = tokio::sync::mpsc::channel(10);
-        let (broadcast_tx, broadcast_rx) =
-            tokio::sync::broadcast::channel::<BroadcastEventContainer>(10);
-
-        // Create (but don't yet start to poll) the futures that will send messages
-        let senders = SENDERS.iter().map(move |sender| {
-            tokio::spawn({
-                use rand::prelude::*;
-
-                let connection_messages = gen_conn(sender);
-                let broadcast_messages = gen_broad(sender);
-                let conn_tx = conn_tx.clone();
-                let broadcast_tx = broadcast_tx.clone();
-                let send_interval = Duration::from_millis(thread_rng().gen_range(1..10));
-
-                async move {
-                    for (conn_msg, broad_msg) in
-                        connection_messages.into_iter().zip(broadcast_messages)
-                    {
-                        tokio::time::sleep(send_interval).await;
-                        conn_tx.send(conn_msg).await.unwrap();
-                        tokio::time::sleep(send_interval).await;
-                        broadcast_tx
-                            .send(BroadcastEventContainer::new(broad_msg))
-                            .unwrap();
-                    }
-                }
-            })
-        });
-
-        let mut receiver = NotificationReceiver::new(conn_rx, broadcast_rx);
-
-        let mut conn_messages = HashSet::new();
-        let mut broad_messages = HashSet::new();
-
-        // Poll all of the senders
-        let senders = tokio::spawn(async move {
-            futures::future::join_all(senders).await;
-        });
-
-        while let Some(notification) = receiver.recv().await {
-            match notification {
-                NotificationKind::Connection(msg) => {
-                    assert!(
-                        conn_messages.insert(msg.clone()),
-                        "Duplicate connection message: {}",
-                        msg
-                    );
-                }
-                NotificationKind::Broadcast(msg) => {
-                    let msg = msg.downcast::<String>().unwrap();
-                    assert!(
-                        broad_messages.insert(msg.clone()),
-                        "Duplicate broadcast message: {}",
-                        msg
-                    );
-                }
-                NotificationKind::Lagged(n) => {
-                    // In this test this should not happen
-                    panic!("Bug in the test: {n} lagged messages");
-                }
-            }
-        }
-
-        senders.await.unwrap();
-
-        // Make sure that all of the messages from all of the senders were received
-        for sender in SENDERS {
-            for msg in generate_connection_messages(sender) {
-                assert!(
-                    conn_messages.contains(&msg),
-                    "Missing connection message: {}",
-                    msg
-                );
-            }
-
-            for msg in generate_broadcast_messages(sender) {
-                assert!(
-                    broad_messages.contains(&msg),
-                    "Missing broadcast message: {}",
-                    msg
-                );
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_custom_broadcast_event_types() {
-        let (_conn_tx, conn_rx) = mpsc::channel(10);
-        let (broadcast_tx, broadcast_rx) = broadcast::channel(10);
-
-        let mut receiver = NotificationReceiver::new(conn_rx, broadcast_rx);
-
-        #[derive(Clone, Debug)]
-        struct CustomBroadcastEvent {
-            message: String,
-        }
-
-        broadcast_tx
-            .send(BroadcastEventContainer::new(CustomBroadcastEvent {
-                message: "Hello, world!".to_string(),
-            }))
-            .unwrap();
-
-        assert_matches!(receiver.recv().await, Some(NotificationKind::Broadcast(event)) => {
-            let event = event.downcast::<CustomBroadcastEvent>().unwrap();
-            assert_eq!("Hello, world!", event.message);
-        });
     }
 }
