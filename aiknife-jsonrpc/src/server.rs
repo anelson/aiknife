@@ -2,7 +2,9 @@
 #![allow(dead_code)] // TODO: Remove after impl is done
 use super::shared as jsonrpc;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 use tracing::*;
 
 /// A JSON-RPC service that can handle incoming connections and requests, with as little coupling
@@ -167,16 +169,197 @@ impl<'a> NotificationRequest<'a> {
     }
 }
 
-/// Context for a single JSON-RPC connection.
+/// Unique ID for each connection to the server
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct ConnectionId(uuid::Uuid);
+
+/// Unique ID for each request *initiated by this server* to a client.
 ///
-/// TODO: fill this out.
+/// Not the same as [`jsonrpc::Id`] which represents any request ID valid under the JSON RPC spec.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct RequestId(uuid::Uuid);
+
+impl RequestId {
+    fn new() -> Self {
+        Self(uuid::Uuid::now_v7())
+    }
+
+    fn to_jsonrpc_id(&self) -> jsonrpc::Id<'static> {
+        jsonrpc::Id::Str(Cow::Owned(self.0.to_string()))
+    }
+}
+
+impl TryFrom<jsonrpc::Id<'_>> for RequestId {
+    type Error = jsonrpc::JsonRpcError;
+
+    fn try_from(id: jsonrpc::Id<'_>) -> Result<Self, Self::Error> {
+        match &id {
+            jsonrpc::Id::Str(str_id) => {
+                uuid::Uuid::try_parse(str_id).map(RequestId).map_err(|_| {
+                    jsonrpc::JsonRpcError::invalid_response_id(
+                        id.clone(),
+                        "ID does not parse as a UUID",
+                    )
+                })
+            }
+            _ => Err(jsonrpc::JsonRpcError::invalid_response_id(
+                id,
+                "Our request IDs are always strings",
+            )),
+        }
+    }
+}
+
+/// Context for a single JSON-RPC connection.
 #[derive(Clone, Debug)]
 pub struct ConnectionContext {
+    id: ConnectionId,
+
     /// Channel to send notifications to the client connected to this connection
     server_notification_sender: ConnectionNotificationSender,
+
+    /// Map of pending requests that are awaiting a response from the client
+    requests: Arc<
+        Mutex<
+            HashMap<
+                RequestId,
+                tokio::sync::oneshot::Sender<jsonrpc::Response<'static, serde_json::Value>>,
+            >,
+        >,
+    >,
 }
 
 impl ConnectionContext {
+    fn new(server_notification_sender: ConnectionNotificationSender) -> Self {
+        Self {
+            id: ConnectionId(uuid::Uuid::now_v7()),
+            server_notification_sender,
+            requests: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Initiate a method call on the client, from the server.
+    ///
+    /// While the JSON RPC spec doesn't make any allowances for *servers* sending requests to
+    /// *clients*, it doesn't explicitly forbid it either.  And the Model Context Protocol (MCP)
+    /// spec clearly describes servers sending clients both notifications and requests.  Since this
+    /// JSON RPC impl is created for the primary purpose of building MCP servers, this needs to be
+    /// supported.
+    ///
+    /// This sends a method invocation request message to the client, which should be answered by a
+    /// response message from the client.
+    ///
+    /// The return value of this method on success is the JSON `params` payload, if any, from the
+    /// client's response.  If the client responds with an error, that error is returned just as it
+    /// was received from the client.
+    #[instrument(skip_all, fields(method), err)]
+    pub async fn invoke_client_method<'a, T: serde::Serialize + 'a>(
+        &self,
+        method: &'a str,
+        params: impl Into<Option<&'a T>>,
+    ) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
+        #[derive(serde::Serialize)]
+        struct JsonRpcRequest<'a> {
+            jsonrpc: jsonrpc::TwoPointZero,
+            method: &'a str,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            params: Option<serde_json::Value>,
+            id: jsonrpc::Id<'a>,
+        }
+
+        fn serialize_request<'a, T: serde::Serialize + 'a>(
+            method: &'a str,
+            params: impl Into<Option<&'a T>>,
+            id: jsonrpc::Id<'a>,
+        ) -> Result<String, jsonrpc::JsonRpcError> {
+            let id = id.into_owned();
+            let params = params.into();
+            let params = if let Some(params) = params {
+                Some(
+                    serde_json::to_value(params)
+                        .map_err(|e| jsonrpc::JsonRpcError::ser(e, id.clone()))?,
+                )
+            } else {
+                None
+            };
+
+            let request = JsonRpcRequest {
+                jsonrpc: jsonrpc::TwoPointZero,
+                method,
+                params,
+                id: id.clone(),
+            };
+            serde_json::to_string(&request).map_err(|e| jsonrpc::JsonRpcError::ser(e, id))
+        }
+
+        let request_id = RequestId::new();
+
+        let request = serialize_request(method, params, request_id.to_jsonrpc_id())?;
+
+        let (result_sender, result_receiver) = tokio::sync::oneshot::channel();
+
+        // Before we send to the client, add to the map of pending requests so we can match the
+        // response when it comes back
+        self.requests
+            .lock()
+            .unwrap()
+            .insert(request_id.clone(), result_sender);
+
+        match self.server_notification_sender.send(request).await {
+            Ok(()) => {
+                // Request was posted to the channel where the transport should receive it and send
+                // it on to the client
+
+                // When the transport receives the response it will eventually be passed back to
+                // the connection handler.
+                //
+                // TODO: Need a configurable timeout parameter here so server code doesn't wait
+                // forever for client requests.
+                match result_receiver.await {
+                    Ok(response) => {
+                        // The response from the client should be a JSON object matching that of a
+                        // response
+                        debug_assert_eq!(request_id.to_jsonrpc_id(), response.id);
+
+                        // Remove the request from the map of pending requests
+                        self.requests.lock().unwrap().remove(&request_id);
+
+                        match response.payload {
+                            jsonrpc::ResponsePayload::<serde_json::Value>::Success(result) => {
+                                Ok(result.into_owned())
+                            }
+                            jsonrpc::ResponsePayload::Error(error) => {
+                                error!(
+                                    code = error.code(),
+                                    message = error.message(),
+                                    "Client method invocation failed"
+                                );
+
+                                // The client responded with an error to our method call request.
+                                // Package up this error response into a `JsonRpcError` and return it to the caller, but
+                                // remember that the caller here is some server code, either a method implementation or some async task that a method implementation initiated.
+                                // So we're not trying to report the client's own error back up to the client.  Rather the server has encountered a server error because this client method invocation failed.
+                                Err(jsonrpc::JsonRpcError::client_method_failed(method, error))
+                            }
+                        }
+                    }
+                    Err(_) => Err(jsonrpc::JsonRpcError::channel_closed(
+                        "Client disconnected before responding",
+                    )),
+                }
+            }
+            Err(_) => {
+                // The transport has disconnected, so we can't send the request
+                // Remove the request from the map of pending requests
+                self.requests.lock().unwrap().remove(&request_id);
+
+                Err(jsonrpc::JsonRpcError::channel_closed(
+                    "Unable to send request to client",
+                ))
+            }
+        }
+    }
+
     /// Send a notification from the server back to the client.
     ///
     /// Because notifications are one-way, this method is infallible.  There are some ways that the
@@ -184,7 +367,7 @@ impl ConnectionContext {
     /// disconnected, or will disconnect shortly after the notification is written into its buffer.
     ///
     /// Errors that are encountered are logged, but not passed back to the caller
-    pub async fn send_notification<'a, T: serde::Serialize + 'a>(
+    pub async fn send_client_notification<'a, T: serde::Serialize + 'a>(
         &self,
         method: &'a str,
         params: impl Into<Option<&'a T>>,
@@ -347,9 +530,7 @@ where
         jsonrpc::JsonRpcError,
     > {
         let (sender, receiver) = tokio::sync::mpsc::channel(self.config.max_pending_notifications);
-        let context = ConnectionContext {
-            server_notification_sender: sender.clone(),
-        };
+        let context = ConnectionContext::new(sender.clone());
         let handler = self.service.handle_connection(context).await?;
 
         Ok((
@@ -455,9 +636,17 @@ where
         &self,
         request: jsonrpc::Request<'a>,
     ) -> Result<serde_json::Value, jsonrpc::JsonRpcError> {
+        let id = request.id.clone().into_owned();
         let request = MethodRequest::from_jsonrpc_request(request);
 
-        self.handler.handle_method(request).await
+        self.handler.handle_method(request).await.map_err(|mut e| {
+            // Make certain that the error response has the same ID as the request.  Depending
+            // on where the error was raised, it's not always convenient to obtain the ID from
+            // the request.
+            e.set_id(id);
+
+            e
+        })
     }
 
     /// Handle a JSON-RPC notification (which is like a method invocation, but no response is
@@ -575,7 +764,7 @@ mod tests {
                 "trigger_server_notification" => {
                     // Send a notification from server to client
                     self.context
-                        .send_notification(
+                        .send_client_notification(
                             "server_event",
                             &json!({"message": "Hello from server!"}),
                         )
@@ -585,20 +774,20 @@ mod tests {
                 "trigger_multiple_notifications" => {
                     // Send multiple notifications to test ordering
                     self.context
-                        .send_notification("server_event", &json!({"count": 1}))
+                        .send_client_notification("server_event", &json!({"count": 1}))
                         .await;
                     self.context
-                        .send_notification("server_event", &json!({"count": 2}))
+                        .send_client_notification("server_event", &json!({"count": 2}))
                         .await;
                     self.context
-                        .send_notification("server_event", &json!({"count": 3}))
+                        .send_client_notification("server_event", &json!({"count": 3}))
                         .await;
                     Ok(json!("notifications_sent"))
                 }
                 "trigger_parameterless_notification" => {
                     // Send a notification without any parameters
                     self.context
-                        .send_notification::<()>("server_event", None)
+                        .send_client_notification::<()>("server_event", None)
                         .await;
                     Ok(json!("parameterless_notification_sent"))
                 }
@@ -633,9 +822,8 @@ mod tests {
         ConnectionNotificationReceiver,
     ) {
         let (sender, receiver) = tokio::sync::mpsc::channel(100);
-        let context = ConnectionContext {
-            server_notification_sender: sender.clone(),
-        };
+        let context = ConnectionContext::new(sender.clone());
+
         (
             JsonRpcServerConnection::new(MockHandler::new(context), sender),
             receiver,

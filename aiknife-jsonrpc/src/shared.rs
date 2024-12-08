@@ -136,6 +136,20 @@ impl JsonRpcError {
         Self::new(code, message, id, Some(data))
     }
 
+    /// Replace whatever ID is in this error with the given one.
+    ///
+    /// This is meant to be used when errors are reported and don't necessarily know the request ID
+    /// at the site where the error is generated.
+    pub(crate) fn set_id(&mut self, id: impl Into<Option<jsonrpc::Id<'static>>>) {
+        // This is only intended to replace absent or Null IDs
+        debug_assert!(
+            self.id.is_none() || matches!(self.id, Some(jsonrpc::Id::Null)),
+            "ID already set in this error"
+        );
+
+        self.id = id.into();
+    }
+
     /// Construct an entire JSON-RPC response from this error and serialize it to a string.
     pub(crate) fn into_json_rpc_response(self) -> String {
         let response: GenericResponse = self.into();
@@ -186,11 +200,46 @@ impl JsonRpcError {
         )
     }
 
+    pub(crate) fn invalid_response_id(id: jsonrpc::Id<'_>, reason: &'static str) -> Self {
+        Self::new(
+            jsonrpc::ErrorCode::InternalError,
+            format!("ID in response ({id}) is not a valid request ID: {reason}"),
+            id.into_owned(),
+            None,
+        )
+    }
+
+    pub(crate) fn channel_closed(reason: &'static str) -> Self {
+        Self::new(
+            jsonrpc::ErrorCode::ServerError(32000),
+            format!("Channel closed: {reason}"),
+            jsonrpc::Id::Null,
+            None,
+        )
+    }
+
+    pub(crate) fn client_method_failed(method: &str, error: jsonrpc::ErrorObject) -> Self {
+        Self::new(
+            jsonrpc::ErrorCode::ServerError(32000),
+            format!(
+                "Client method '{method}' failed with {}: {}",
+                error.code(),
+                error.message()
+            ),
+            jsonrpc::Id::Null,
+            None,
+        )
+    }
+
     pub(crate) fn internal_error(id: jsonrpc::Id<'static>, err: impl std::error::Error) -> Self {
+        // TODO: shouldn't errors from the impl be reported as "server error", which is a range
+        // from -32000 to -32099?
         Self::from_error(jsonrpc::ErrorCode::InternalError, err, id)
     }
 
     pub(crate) fn internal_anyhow_error(id: jsonrpc::Id<'static>, err: anyhow::Error) -> Self {
+        // TODO: shouldn't errors from the impl be reported as "server error", which is a range
+        // from -32000 to -32099?
         Self::from_anyhow_error(jsonrpc::ErrorCode::InternalError, err, id)
     }
 }
